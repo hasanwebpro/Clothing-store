@@ -30,6 +30,9 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 FRONTEND_DIST = BASE_DIR / 'frontend_dist'
 TEMPLATES[0]['DIRS'] = [str(FRONTEND_DIST)]
 
+# WhiteNoise serves React's assets (JS/CSS) at root level (/assets/, /favicon.svg etc.)
+WHITENOISE_ROOT = str(FRONTEND_DIST)
+
 # ── Logging: write to backend directory (writable on PA) ─────────────────────
 LOGGING = {
     'version': 1,
