@@ -27,7 +27,7 @@ SECURE_CONTENT_TYPE_NOSNIFF    = True
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # ── Templates: let Django find React's built index.html ───────────────────────
-FRONTEND_DIST = BASE_DIR.parent / 'frontend' / 'dist'
+FRONTEND_DIST = BASE_DIR / 'frontend_dist'
 TEMPLATES[0]['DIRS'] = [str(FRONTEND_DIST)]
 
 # ── Logging: write to backend directory (writable on PA) ─────────────────────

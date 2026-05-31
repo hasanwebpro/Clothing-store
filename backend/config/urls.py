@@ -45,7 +45,10 @@ def spa_fallback(request, *args, **kwargs):
     """Serve React's index.html for any route not matched by the API.
     Also serves actual files from the dist folder (favicon.svg, robots.txt, etc.)
     """
-    dist = Path(settings.BASE_DIR).parent / 'frontend' / 'dist'
+    # Try backend/frontend_dist first (Railway), then parent/frontend/dist (local/PA)
+    dist = Path(settings.BASE_DIR) / 'frontend_dist'
+    if not dist.exists():
+        dist = Path(settings.BASE_DIR).parent / 'frontend' / 'dist'
 
     # Serve actual static files that exist in dist root (favicon, robots.txt…)
     if request.path not in ('', '/'):
