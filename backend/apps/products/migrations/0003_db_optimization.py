@@ -1,23 +1,52 @@
-"""
-Migration: 0003_db_optimization
-
-Production-readiness pass — adds everything a real e-commerce DB needs:
-
-  1. Missing composite & covering indexes (query performance)
-  2. Full-text search index on products(name, description, brand)
-  3. UNIQUE DB constraint on orders.order_number
-  4. Database triggers:
-       - trg_cart_add_reserve    : increment quantity_reserved when cart item added
-       - trg_cart_update_reserve : adjust quantity_reserved when cart qty changes
-       - trg_cart_delete_release : release quantity_reserved when cart item removed
-       - trg_order_cancel_restock: restore quantity_on_hand when order cancelled
-       - trg_review_rating_sync  : keep product average_rating/review_count in sync
-  5. Database views:
-       - v_low_stock             : variants below reorder threshold
-       - v_order_summary         : per-order totals with customer info
-       - v_product_catalog       : products with primary image + stock roll-up
-"""
 from django.db import migrations
+
+
+def add_indexes(apps, schema_editor):
+    """Add indexes safely — skips any that already exist."""
+    statements = [
+        "ALTER TABLE products ADD INDEX idx_products_sale_price (sale_price);",
+        "ALTER TABLE products ADD INDEX idx_products_brand (brand(64));",
+        "ALTER TABLE products ADD INDEX idx_products_rating_published (average_rating DESC, is_published);",
+        "ALTER TABLE reviews ADD INDEX idx_reviews_product_approved (product_id, is_approved, created_at DESC);",
+        "ALTER TABLE reviews ADD INDEX idx_reviews_user_product (user_id, product_id);",
+        "ALTER TABLE orders ADD INDEX idx_orders_payment_status (payment_status);",
+        "ALTER TABLE coupons ADD INDEX idx_coupons_active_validity (is_active, valid_from, valid_until);",
+        "ALTER TABLE inventory ADD INDEX idx_inventory_stock (quantity_on_hand, reorder_threshold);",
+        "ALTER TABLE order_items ADD INDEX idx_order_items_variant_order (variant_id, order_id);",
+        "ALTER TABLE product_variants ADD INDEX idx_variants_product_active (product_id, is_active);",
+        "ALTER TABLE addresses ADD INDEX idx_addresses_user_default (user_id, is_default);",
+        "ALTER TABLE notifications ADD INDEX idx_notifications_user_created (user_id, created_at DESC);",
+        "ALTER TABLE products ADD FULLTEXT INDEX ft_products_search (name, description, brand);",
+        "ALTER TABLE orders ADD UNIQUE INDEX uq_order_number (order_number);",
+    ]
+    for sql in statements:
+        try:
+            schema_editor.execute(sql)
+        except Exception:
+            pass  # Index already exists — safe to skip
+
+
+def drop_indexes(apps, schema_editor):
+    for sql in [
+        "ALTER TABLE products DROP INDEX IF EXISTS idx_products_sale_price;",
+        "ALTER TABLE products DROP INDEX IF EXISTS idx_products_brand;",
+        "ALTER TABLE products DROP INDEX IF EXISTS idx_products_rating_published;",
+        "ALTER TABLE reviews DROP INDEX IF EXISTS idx_reviews_product_approved;",
+        "ALTER TABLE reviews DROP INDEX IF EXISTS idx_reviews_user_product;",
+        "ALTER TABLE orders DROP INDEX IF EXISTS idx_orders_payment_status;",
+        "ALTER TABLE coupons DROP INDEX IF EXISTS idx_coupons_active_validity;",
+        "ALTER TABLE inventory DROP INDEX IF EXISTS idx_inventory_stock;",
+        "ALTER TABLE order_items DROP INDEX IF EXISTS idx_order_items_variant_order;",
+        "ALTER TABLE product_variants DROP INDEX IF EXISTS idx_variants_product_active;",
+        "ALTER TABLE addresses DROP INDEX IF EXISTS idx_addresses_user_default;",
+        "ALTER TABLE notifications DROP INDEX IF EXISTS idx_notifications_user_created;",
+        "ALTER TABLE products DROP INDEX IF EXISTS ft_products_search;",
+        "ALTER TABLE orders DROP INDEX IF EXISTS uq_order_number;",
+    ]:
+        try:
+            schema_editor.execute(sql)
+        except Exception:
+            pass
 
 
 class Migration(migrations.Migration):
@@ -29,72 +58,14 @@ class Migration(migrations.Migration):
 
     operations = [
 
-        # ── 1. INDEXES ────────────────────────────────────────────────────────
+        # ── Indexes (safe — skips duplicates) ─────────────────────────────────
+        migrations.RunPython(add_indexes, reverse_code=drop_indexes),
 
+        # ── Triggers ──────────────────────────────────────────────────────────
         migrations.RunSQL(
-            sql="ALTER TABLE products ADD INDEX idx_products_sale_price (sale_price);",
-            reverse_sql="ALTER TABLE products DROP INDEX idx_products_sale_price;",
+            sql="DROP TRIGGER IF EXISTS trg_cart_add_reserve;",
+            reverse_sql="DROP TRIGGER IF EXISTS trg_cart_add_reserve;",
         ),
-        migrations.RunSQL(
-            sql="ALTER TABLE products ADD INDEX idx_products_brand (brand(64));",
-            reverse_sql="ALTER TABLE products DROP INDEX idx_products_brand;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE products ADD INDEX idx_products_rating_published (average_rating DESC, is_published);",
-            reverse_sql="ALTER TABLE products DROP INDEX idx_products_rating_published;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE reviews ADD INDEX idx_reviews_product_approved (product_id, is_approved, created_at DESC);",
-            reverse_sql="ALTER TABLE reviews DROP INDEX idx_reviews_product_approved;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE reviews ADD INDEX idx_reviews_user_product (user_id, product_id);",
-            reverse_sql="ALTER TABLE reviews DROP INDEX idx_reviews_user_product;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE orders ADD INDEX idx_orders_payment_status (payment_status);",
-            reverse_sql="ALTER TABLE orders DROP INDEX idx_orders_payment_status;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE coupons ADD INDEX idx_coupons_active_validity (is_active, valid_from, valid_until);",
-            reverse_sql="ALTER TABLE coupons DROP INDEX idx_coupons_active_validity;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE inventory ADD INDEX idx_inventory_stock (quantity_on_hand, reorder_threshold);",
-            reverse_sql="ALTER TABLE inventory DROP INDEX idx_inventory_stock;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE order_items ADD INDEX idx_order_items_variant_order (variant_id, order_id);",
-            reverse_sql="ALTER TABLE order_items DROP INDEX idx_order_items_variant_order;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE product_variants ADD INDEX idx_variants_product_active (product_id, is_active);",
-            reverse_sql="ALTER TABLE product_variants DROP INDEX idx_variants_product_active;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE addresses ADD INDEX idx_addresses_user_default (user_id, is_default);",
-            reverse_sql="ALTER TABLE addresses DROP INDEX idx_addresses_user_default;",
-        ),
-        migrations.RunSQL(
-            sql="ALTER TABLE notifications ADD INDEX idx_notifications_user_created (user_id, created_at DESC);",
-            reverse_sql="ALTER TABLE notifications DROP INDEX idx_notifications_user_created;",
-        ),
-
-        # ── 2. FULL-TEXT SEARCH ───────────────────────────────────────────────
-        migrations.RunSQL(
-            sql="ALTER TABLE products ADD FULLTEXT INDEX ft_products_search (name, description, brand);",
-            reverse_sql="ALTER TABLE products DROP INDEX ft_products_search;",
-        ),
-
-        # ── 3. UNIQUE DB CONSTRAINT on order_number ───────────────────────────
-        migrations.RunSQL(
-            sql="ALTER TABLE orders ADD UNIQUE INDEX uq_order_number (order_number);",
-            reverse_sql="ALTER TABLE orders DROP INDEX uq_order_number;",
-        ),
-
-        # ── 4. TRIGGERS ───────────────────────────────────────────────────────
-
-        # Reserve stock when a cart item is created
         migrations.RunSQL(
             sql="""
             CREATE TRIGGER trg_cart_add_reserve
@@ -108,8 +79,10 @@ class Migration(migrations.Migration):
             """,
             reverse_sql="DROP TRIGGER IF EXISTS trg_cart_add_reserve;",
         ),
-
-        # Adjust reservation when cart quantity changes
+        migrations.RunSQL(
+            sql="DROP TRIGGER IF EXISTS trg_cart_update_reserve;",
+            reverse_sql="DROP TRIGGER IF EXISTS trg_cart_update_reserve;",
+        ),
         migrations.RunSQL(
             sql="""
             CREATE TRIGGER trg_cart_update_reserve
@@ -125,8 +98,10 @@ class Migration(migrations.Migration):
             """,
             reverse_sql="DROP TRIGGER IF EXISTS trg_cart_update_reserve;",
         ),
-
-        # Release reservation when a cart item is removed
+        migrations.RunSQL(
+            sql="DROP TRIGGER IF EXISTS trg_cart_delete_release;",
+            reverse_sql="DROP TRIGGER IF EXISTS trg_cart_delete_release;",
+        ),
         migrations.RunSQL(
             sql="""
             CREATE TRIGGER trg_cart_delete_release
@@ -140,8 +115,10 @@ class Migration(migrations.Migration):
             """,
             reverse_sql="DROP TRIGGER IF EXISTS trg_cart_delete_release;",
         ),
-
-        # Restore on_hand when order is cancelled
+        migrations.RunSQL(
+            sql="DROP TRIGGER IF EXISTS trg_order_cancel_restock;",
+            reverse_sql="DROP TRIGGER IF EXISTS trg_order_cancel_restock;",
+        ),
         migrations.RunSQL(
             sql="""
             CREATE TRIGGER trg_order_cancel_restock
@@ -158,9 +135,10 @@ class Migration(migrations.Migration):
             """,
             reverse_sql="DROP TRIGGER IF EXISTS trg_order_cancel_restock;",
         ),
-
-        # Keep product rating + review_count in sync at DB level
-        # (backup to the Python observer — ensures consistency even if Python fails)
+        migrations.RunSQL(
+            sql="DROP TRIGGER IF EXISTS trg_review_rating_sync;",
+            reverse_sql="DROP TRIGGER IF EXISTS trg_review_rating_sync;",
+        ),
         migrations.RunSQL(
             sql="""
             CREATE TRIGGER trg_review_rating_sync
@@ -178,7 +156,10 @@ class Migration(migrations.Migration):
             """,
             reverse_sql="DROP TRIGGER IF EXISTS trg_review_rating_sync;",
         ),
-
+        migrations.RunSQL(
+            sql="DROP TRIGGER IF EXISTS trg_review_rating_sync_delete;",
+            reverse_sql="DROP TRIGGER IF EXISTS trg_review_rating_sync_delete;",
+        ),
         migrations.RunSQL(
             sql="""
             CREATE TRIGGER trg_review_rating_sync_delete
@@ -195,54 +176,46 @@ class Migration(migrations.Migration):
             reverse_sql="DROP TRIGGER IF EXISTS trg_review_rating_sync_delete;",
         ),
 
-        # ── 5. VIEWS ─────────────────────────────────────────────────────────
-
-        # Low-stock dashboard
+        # ── Views ─────────────────────────────────────────────────────────────
+        migrations.RunSQL(
+            sql="DROP VIEW IF EXISTS v_low_stock;",
+            reverse_sql="DROP VIEW IF EXISTS v_low_stock;",
+        ),
         migrations.RunSQL(
             sql="""
             CREATE VIEW v_low_stock AS
             SELECT
-                pv.id            AS variant_id,
-                pv.sku,
-                p.id             AS product_id,
-                p.name           AS product_name,
-                p.brand,
-                i.quantity_on_hand,
-                i.quantity_reserved,
+                pv.id AS variant_id, pv.sku,
+                p.id AS product_id, p.name AS product_name, p.brand,
+                i.quantity_on_hand, i.quantity_reserved,
                 (i.quantity_on_hand - i.quantity_reserved) AS available,
                 i.reorder_threshold
             FROM inventory i
             JOIN product_variants pv ON pv.id = i.variant_id
-            JOIN products p          ON p.id  = pv.product_id
+            JOIN products p ON p.id = pv.product_id
             WHERE (i.quantity_on_hand - i.quantity_reserved) <= i.reorder_threshold
-              AND p.is_published = TRUE
-              AND pv.is_active   = TRUE
+              AND p.is_published = TRUE AND pv.is_active = TRUE
             ORDER BY available ASC;
             """,
             reverse_sql="DROP VIEW IF EXISTS v_low_stock;",
         ),
-
-        # Order summary for admin reporting
+        migrations.RunSQL(
+            sql="DROP VIEW IF EXISTS v_order_summary;",
+            reverse_sql="DROP VIEW IF EXISTS v_order_summary;",
+        ),
         migrations.RunSQL(
             sql="""
             CREATE VIEW v_order_summary AS
             SELECT
-                o.id             AS order_id,
-                o.order_number,
-                o.status,
-                o.payment_status,
-                o.payment_method,
-                o.subtotal,
-                o.discount_amount,
-                o.shipping_cost,
-                o.total_amount,
-                o.created_at,
-                u.email          AS customer_email,
+                o.id AS order_id, o.order_number, o.status, o.payment_status,
+                o.payment_method, o.subtotal, o.discount_amount, o.shipping_cost,
+                o.total_amount, o.created_at,
+                u.email AS customer_email,
                 CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
-                COUNT(oi.id)     AS item_count,
+                COUNT(oi.id) AS item_count,
                 SUM(oi.quantity) AS total_units
             FROM orders o
-            JOIN users u      ON u.id = o.user_id
+            JOIN users u ON u.id = o.user_id
             JOIN order_items oi ON oi.order_id = o.id
             GROUP BY o.id, o.order_number, o.status, o.payment_status,
                      o.payment_method, o.subtotal, o.discount_amount,
@@ -251,33 +224,25 @@ class Migration(migrations.Migration):
             """,
             reverse_sql="DROP VIEW IF EXISTS v_order_summary;",
         ),
-
-        # Product catalog with stock roll-up
+        migrations.RunSQL(
+            sql="DROP VIEW IF EXISTS v_product_catalog;",
+            reverse_sql="DROP VIEW IF EXISTS v_product_catalog;",
+        ),
         migrations.RunSQL(
             sql="""
             CREATE VIEW v_product_catalog AS
             SELECT
-                p.id,
-                p.name,
-                p.slug,
-                p.brand,
-                p.base_price,
-                p.sale_price,
-                p.average_rating,
-                p.review_count,
-                p.is_featured,
-                p.is_published,
-                c.name           AS category_name,
-                c.slug           AS category_slug,
-                COUNT(DISTINCT pv.id)                              AS variant_count,
+                p.id, p.name, p.slug, p.brand, p.base_price, p.sale_price,
+                p.average_rating, p.review_count, p.is_featured, p.is_published,
+                c.name AS category_name, c.slug AS category_slug,
+                COUNT(DISTINCT pv.id) AS variant_count,
                 SUM(GREATEST(0, i.quantity_on_hand - i.quantity_reserved)) AS total_stock,
                 (SELECT img.image FROM product_images img
-                 WHERE img.product_id = p.id AND img.is_primary = TRUE
-                 LIMIT 1)                                          AS primary_image
+                 WHERE img.product_id = p.id AND img.is_primary = TRUE LIMIT 1) AS primary_image
             FROM products p
-            JOIN categories c      ON c.id = p.category_id
+            JOIN categories c ON c.id = p.category_id
             LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = TRUE
-            LEFT JOIN inventory i         ON i.variant_id = pv.id
+            LEFT JOIN inventory i ON i.variant_id = pv.id
             WHERE p.is_published = TRUE
             GROUP BY p.id, p.name, p.slug, p.brand, p.base_price, p.sale_price,
                      p.average_rating, p.review_count, p.is_featured, p.is_published,
