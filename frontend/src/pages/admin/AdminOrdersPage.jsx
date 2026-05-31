@@ -1,0 +1,231 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ordersApi } from '../../api/orders.api';
+import toast from 'react-hot-toast';
+
+const STATUS_OPTIONS = ['pending','confirmed','processing','shipped','delivered','cancelled','refunded'];
+
+const STATUS_STYLE = {
+  pending:    { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.25)'  },
+  confirmed:  { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.25)'  },
+  processing: { color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.25)'  },
+  shipped:    { color: '#06b6d4', bg: 'rgba(6,182,212,0.12)',  border: 'rgba(6,182,212,0.25)'   },
+  delivered:  { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)'  },
+  cancelled:  { color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.25)'   },
+  refunded:   { color: '#8b9098', bg: 'rgba(139,144,152,0.1)', border: 'rgba(139,144,152,0.2)'  },
+};
+
+const PAY_STYLE = {
+  paid:    { color: '#10b981', bg: 'rgba(16,185,129,0.1)',  label: 'Paid'    },
+  pending: { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', label: 'Pending' },
+  failed:  { color: '#ef4444', bg: 'rgba(239,68,68,0.1)',  label: 'Failed'  },
+};
+
+export default function AdminOrdersPage() {
+  const queryClient = useQueryClient();
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterPayment, setFilterPayment] = useState('');
+  const [search, setSearch] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-orders'],
+    queryFn: () => ordersApi.getOrders().then(r => r.data?.results || r.data || []),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, status }) => ordersApi.updateStatus(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['admin-orders']);
+      toast.success('Status updated');
+      setUpdatingId(null);
+    },
+    onError: () => toast.error('Could not update status'),
+  });
+
+  const orders = (data || []).filter(o => {
+    if (filterStatus && o.status !== filterStatus) return false;
+    if (filterPayment && o.payment_status !== filterPayment) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!o.order_number?.toLowerCase().includes(q) && !o.customer_name?.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const easypaisaPending = (data || []).filter(o => o.payment_method === 'easypaisa' && o.payment_status === 'pending');
+
+  return (
+    <div className="space-y-5">
+
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-semibold text-white">Orders</h1>
+        <p className="text-sm mt-0.5" style={{ color: '#8b9098' }}>
+          Manage fulfilment and payments
+        </p>
+      </div>
+
+      {/* Easypaisa alert */}
+      {easypaisaPending.length > 0 && (
+        <div className="rounded-xl p-4 flex items-start gap-3"
+          style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+          <svg className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-emerald-400">
+              {easypaisaPending.length} Easypaisa payment{easypaisaPending.length > 1 ? 's' : ''} awaiting verification
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: '#8b9098' }}>
+              Verify in your Easypaisa app, then set order status to Confirmed.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#565a6a' }}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input type="text" placeholder="Order # or customer…" value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="input-dark pl-9 pr-3 py-2 rounded-lg text-sm w-52" />
+        </div>
+
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          className="input-dark py-2 rounded-lg text-sm" style={{ width: 160 }}>
+          <option value="">All statuses</option>
+          {STATUS_OPTIONS.map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
+        </select>
+
+        <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
+          className="input-dark py-2 rounded-lg text-sm" style={{ width: 150 }}>
+          <option value="">All payments</option>
+          <option value="paid">Paid</option>
+          <option value="pending">Pending</option>
+          <option value="failed">Failed</option>
+        </select>
+
+        {!isLoading && (
+          <span className="text-xs font-medium px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(34,37,46,0.70)', color: '#8b9098', border: '1px solid #2d3139' }}>
+            {orders.length} result{orders.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
+      {/* Loading */}
+      {isLoading && (
+        <div className="space-y-2">
+          {[...Array(6)].map((_, i) => <div key={i} className="h-14 rounded-xl animate-pulse" style={{ background: 'rgba(28,31,38,0.65)' }} />)}
+        </div>
+      )}
+
+      {/* Empty */}
+      {!isLoading && orders.length === 0 && (
+        <div className="text-center py-20 rounded-xl" style={{ background: 'rgba(28,31,38,0.65)', border: '1px dashed #2d3139' }}>
+          <p className="text-sm font-medium" style={{ color: '#565a6a' }}>No orders found</p>
+        </div>
+      )}
+
+      {/* Table */}
+      {!isLoading && orders.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(28,31,38,0.65)', border: '1px solid #2d3139' }}>
+          <table className="w-full text-sm">
+            <thead style={{ background: 'rgba(34,37,46,0.70)' }}>
+              <tr>
+                {[
+                  { label: 'Order',          cls: '' },
+                  { label: 'Customer',       cls: 'hidden md:table-cell' },
+                  { label: 'Date',           cls: 'hidden lg:table-cell' },
+                  { label: 'Status',         cls: '' },
+                  { label: 'Payment',        cls: '' },
+                  { label: 'Total',          cls: '' },
+                  { label: '',               cls: '' },
+                ].map((h, i) => (
+                  <th key={i} className={`text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-wider ${h.cls}`}
+                    style={{ color: '#8b9098', borderBottom: '1px solid #2d3139' }}>
+                    {h.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => {
+                const st = STATUS_STYLE[order.status] || STATUS_STYLE.pending;
+                const pt = PAY_STYLE[order.payment_status] || PAY_STYLE.pending;
+                return (
+                  <tr key={order.id} className="hover:bg-[#22252e] transition-colors" style={{ borderTop: '1px solid #2d3139' }}>
+
+                    <td className="px-5 py-3.5">
+                      <span className="font-mono text-xs font-semibold" style={{ color: '#f59e0b' }}>
+                        {order.order_number}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-3.5 hidden md:table-cell">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 text-white"
+                          style={{ background: '#3b82f6' }}>
+                          {(order.customer_name || order.user?.first_name || '?')[0].toUpperCase()}
+                        </div>
+                        <span className="text-sm" style={{ color: '#d1d5db' }}>
+                          {order.customer_name || order.user?.first_name || '—'}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-3.5 hidden lg:table-cell text-xs tabular-nums" style={{ color: '#8b9098' }}>
+                      {new Date(order.created_at).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </td>
+
+                    <td className="px-5 py-3.5">
+                      {updatingId === order.id ? (
+                        <select className="input-dark py-1.5 text-xs rounded-lg" style={{ width: 140 }}
+                          defaultValue={order.status}
+                          onChange={e => updateMutation.mutate({ id: order.id, status: e.target.value })}
+                          autoFocus onBlur={() => setUpdatingId(null)}>
+                          {STATUS_OPTIONS.map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
+                        </select>
+                      ) : (
+                        <button onClick={() => setUpdatingId(order.id)} title="Click to change"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide border cursor-pointer transition-opacity hover:opacity-80"
+                          style={{ background: st.bg, color: st.color, borderColor: st.border }}>
+                          {order.status}
+                        </button>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-3.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                        style={{ background: pt.bg, color: pt.color }}>
+                        {pt.label}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-3.5 font-semibold tabular-nums text-sm text-white">
+                      PKR {Number(order.total_amount).toLocaleString()}
+                    </td>
+
+                    <td className="px-5 py-3.5">
+                      <button onClick={() => setUpdatingId(order.id)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                        style={{ background: 'rgba(34,37,46,0.70)', color: '#8b9098', border: '1px solid #2d3139' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#2d3139'; e.currentTarget.style.color = '#f1f2f4'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#22252e'; e.currentTarget.style.color = '#8b9098'; }}>
+                        Update
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
