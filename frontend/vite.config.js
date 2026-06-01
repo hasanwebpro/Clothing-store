@@ -19,4 +19,16 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react':   ['react', 'react-dom', 'react-router-dom'],
+          'vendor-query':   ['@tanstack/react-query'],
+          'vendor-charts':  ['recharts'],
+          'vendor-ui':      ['react-hot-toast', 'axios', 'react-hook-form', 'clsx'],
+        },
+      },
+    },
+  },
 });
