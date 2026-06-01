@@ -33,37 +33,9 @@ APP ROUTING STRUCTURE:
   /api/v1/newsletter/  → apps/newsletter/urls.py     (email subscriptions)
 """
 from django.contrib import admin
-from django.urls import path, include, re_path
+from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.http import FileResponse, HttpResponse
-import mimetypes
-from pathlib import Path
-
-
-def spa_fallback(request, *args, **kwargs):
-    """Serve React's index.html for any route not matched by the API.
-    Also serves actual files from the dist folder (favicon.svg, robots.txt, etc.)
-    """
-    # Try backend/frontend_dist first (Railway), then parent/frontend/dist (local/PA)
-    dist = Path(settings.BASE_DIR) / 'frontend_dist'
-    if not dist.exists():
-        dist = Path(settings.BASE_DIR).parent / 'frontend' / 'dist'
-
-    # Serve actual static files that exist in dist root (favicon, robots.txt…)
-    if request.path not in ('', '/'):
-        candidate = dist / request.path.lstrip('/')
-        if candidate.exists() and candidate.is_file():
-            ct, _ = mimetypes.guess_type(str(candidate))
-            return FileResponse(open(candidate, 'rb'), content_type=ct or 'application/octet-stream')
-
-    index = dist / 'index.html'
-    if not index.exists():
-        return HttpResponse(
-            '<h1>Frontend not built</h1><p>Run: <code>npm run build</code> in the frontend directory.</p>',
-            status=503, content_type='text/html',
-        )
-    return FileResponse(open(index, 'rb'), content_type='text/html; charset=utf-8')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -83,11 +55,6 @@ urlpatterns = [
     path('api/v1/wishlist/',      include('apps.users.wishlist_urls')),
 ]
 
-# Serve media files in development (PA nginx handles this in production)
+# Serve media files in development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
-# ── SPA catch-all: must be LAST — serves React frontend for all non-API routes
-urlpatterns += [
-    re_path(r'^(?!api/|admin/|static/|media/|assets/).*$', spa_fallback),
-]
