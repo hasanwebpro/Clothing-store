@@ -35,6 +35,8 @@ BENEFITS
 • Extensibility  — new observer/decorator = new file, no edits here
 """
 import logging
+import random
+from datetime import timedelta, date
 from django.db import transaction
 from apps.cart.services import CartService
 from apps.pricing.decorators import CartPriceCalculator
@@ -42,6 +44,24 @@ from apps.inventory.models import Inventory
 from core.events import EventBus, Events
 from core.exceptions import InsufficientStockError
 from .models import Order, OrderItem, OrderStatusHistory
+
+# ── Delivery simulation data ──────────────────────────────────────────────────
+_DELIVERY_DAYS = [1, 2, 3, 3, 4, 5, 5, 7]   # weighted — most 3-5 days
+
+_RIDERS = [
+    'Ali Hassan', 'Muhammad Bilal', 'Usman Khan', 'Tariq Mehmood',
+    'Zubair Ahmed', 'Kamran Malik', 'Faisal Raza', 'Asad Nawaz',
+    'Hamza Siddiqui', 'Junaid Iqbal', 'Shahzad Butt', 'Rizwan Anwar',
+]
+
+_AUTO_NOTES = {
+    'confirmed':  'Your order has been confirmed and is being prepared.',
+    'processing': 'Your items are being packed and quality-checked at our warehouse.',
+    'shipped':    'Your package has left our warehouse and is on its way to you.',
+    'delivered':  'Your package has been delivered. Thank you for shopping with us!',
+    'cancelled':  'Your order has been cancelled.',
+    'refunded':   'Your refund has been processed.',
+}
 
 logger = logging.getLogger(__name__)
 cart_service = CartService()
@@ -79,7 +99,8 @@ class OrderService:
         ]
         totals = price_calc.calculate_cart(items_data, cart.coupon_code)
 
-        # Step 3: Create Order
+        # Step 3: Create Order (with simulated delivery window)
+        estimated_delivery = date.today() + timedelta(days=random.choice(_DELIVERY_DAYS))
         order = Order.objects.create(
             user=user,
             order_number=Order.generate_order_number(),
@@ -92,6 +113,7 @@ class OrderService:
             payment_method=payment_method,
             payment_status='pending',
             notes=notes,
+            estimated_delivery=estimated_delivery,
         )
 
         # Step 4: Create OrderItems (snapshot product name + SKU)
@@ -144,17 +166,26 @@ class OrderService:
         return order
 
     @transaction.atomic
-    def update_status(self, order_id: int, new_status: str, changed_by, note: str = '') -> Order:
+    def update_status(self, order_id: int, new_status: str, changed_by,
+                      note: str = '', rider_name: str = '', tracking_note: str = '') -> Order:
         order = Order.objects.select_for_update().get(pk=order_id)
         old_status = order.status
         order.status = new_status
+
+        # Auto-assign a rider when shipped (unless one already set or provided)
+        if new_status == 'shipped':
+            order.rider_name = rider_name or order.rider_name or random.choice(_RIDERS)
+
+        # Set tracking note — use provided value, else auto-generate
+        order.tracking_note = tracking_note or _AUTO_NOTES.get(new_status, '')
+
         order.save()
 
         OrderStatusHistory.objects.create(
             order=order,
             old_status=old_status,
             new_status=new_status,
-            note=note,
+            note=note or _AUTO_NOTES.get(new_status, ''),
             changed_by=changed_by,
         )
 

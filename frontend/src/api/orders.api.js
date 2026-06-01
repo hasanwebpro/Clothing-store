@@ -6,4 +6,5 @@ export const ordersApi = {
   getOrder: (orderNumber) => apiClient.get(`/orders/${orderNumber}/`),
   cancelOrder: (id) => apiClient.post(`/orders/${id}/cancel/`),
   updateStatus: (id, data) => apiClient.patch(`/orders/${id}/status/`, data),
+  // data: { status, note?, rider_name?, tracking_note? }
 };

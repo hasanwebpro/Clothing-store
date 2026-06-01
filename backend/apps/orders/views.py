@@ -116,6 +116,8 @@ class UpdateOrderStatusView(APIView):
             new_status=serializer.validated_data['status'],
             changed_by=request.user,
             note=serializer.validated_data.get('note', ''),
+            rider_name=serializer.validated_data.get('rider_name', ''),
+            tracking_note=serializer.validated_data.get('tracking_note', ''),
         )
         return Response(OrderSerializer(order).data)
 

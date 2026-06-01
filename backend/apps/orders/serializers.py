@@ -60,6 +60,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'id', 'order_number', 'status', 'payment_method', 'payment_status',
             'subtotal', 'shipping_cost', 'discount_amount', 'total_amount',
             'coupon_code', 'shipping_address', 'notes',
+            'estimated_delivery', 'rider_name', 'tracking_note',
             'items', 'status_history', 'created_at', 'updated_at',
         ]
 
@@ -90,3 +91,5 @@ class UpdateOrderStatusSerializer(serializers.Serializer):
         'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'
     ])
     note = serializers.CharField(required=False, default='', allow_blank=True)
+    rider_name = serializers.CharField(required=False, default='', allow_blank=True)
+    tracking_note = serializers.CharField(required=False, default='', allow_blank=True)

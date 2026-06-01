@@ -81,6 +81,10 @@ class Order(models.Model):
     payment_method = models.CharField(max_length=15, choices=PAYMENT_METHOD_CHOICES)
     payment_status = models.CharField(max_length=10, choices=PAYMENT_STATUS_CHOICES, default='pending')
     notes = models.TextField(blank=True)
+    # ── Delivery simulation fields ────────────────────────────────────────────
+    estimated_delivery = models.DateField(null=True, blank=True)
+    rider_name = models.CharField(max_length=100, blank=True)
+    tracking_note = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 

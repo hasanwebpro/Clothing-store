@@ -49,7 +49,13 @@ export default function OrderSuccessPage() {
             { label: 'Order Number',      value: order.order_number, bold: true, mono: true },
             { label: 'Total Amount',       value: `PKR ${Number(order.total_amount).toLocaleString()}`, bold: true },
             { label: 'Payment Method',     value: order.payment_method?.replace('_',' '), capitalize: true },
-            { label: 'Estimated Delivery', value: '3–5 business days' },
+            {
+              label: 'Estimated Delivery',
+              value: order.estimated_delivery
+                ? new Date(order.estimated_delivery + 'T00:00:00').toLocaleDateString('en-PK', { weekday: 'long', month: 'long', day: 'numeric' })
+                : '3–5 business days',
+              bold: true,
+            },
           ].map(({ label, value, bold, mono, capitalize }) => (
             <div key={label} className="flex justify-between text-sm py-2 border-b border-neutral-50 last:border-0">
               <span className="text-neutral-500">{label}</span>

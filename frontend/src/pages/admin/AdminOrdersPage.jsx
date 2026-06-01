@@ -21,12 +21,155 @@ const PAY_STYLE = {
   failed:  { color: '#ef4444', bg: 'rgba(239,68,68,0.1)',  label: 'Failed'  },
 };
 
+const AUTO_NOTES = {
+  confirmed:  'Your order has been confirmed and is being prepared.',
+  processing: 'Your items are being packed and quality-checked at our warehouse.',
+  shipped:    'Your package has left our warehouse and is on its way to you.',
+  delivered:  'Your package has been delivered. Thank you for shopping with us!',
+  cancelled:  'Your order has been cancelled.',
+  refunded:   'Your refund has been processed.',
+};
+
+// ── Update modal ──────────────────────────────────────────────────────────────
+function UpdateModal({ order, onClose, onSave, isLoading }) {
+  const [status, setStatus] = useState(order.status);
+  const [note, setNote] = useState('');
+  const [riderName, setRiderName] = useState(order.rider_name || '');
+  const [trackingNote, setTrackingNote] = useState('');
+
+  const st = STATUS_STYLE[status] || STATUS_STYLE.pending;
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    onSave({
+      id: order.id,
+      status,
+      note: note || AUTO_NOTES[status] || '',
+      rider_name: riderName,
+      tracking_note: trackingNote || AUTO_NOTES[status] || '',
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+        style={{ background: '#1c1f26', border: '1px solid #2d3139' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #2d3139' }}>
+          <div>
+            <h3 className="font-semibold text-white text-sm">Update Order</h3>
+            <p className="text-xs mt-0.5 font-mono" style={{ color: '#f59e0b' }}>{order.order_number}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10"
+            style={{ color: '#8b9098' }}>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+
+          {/* Status */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8b9098' }}>
+              New Status
+            </label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {STATUS_OPTIONS.map(s => {
+                const ss = STATUS_STYLE[s] || STATUS_STYLE.pending;
+                const active = status === s;
+                return (
+                  <button type="button" key={s} onClick={() => setStatus(s)}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold capitalize text-left transition-all border"
+                    style={{
+                      background: active ? ss.bg : 'transparent',
+                      color: active ? ss.color : '#8b9098',
+                      borderColor: active ? ss.border : '#2d3139',
+                    }}>
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Rider name — only for shipped */}
+          {status === 'shipped' && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8b9098' }}>
+                Rider Name <span style={{ color: '#565a6a' }}>(auto-assigned if empty)</span>
+              </label>
+              <input
+                type="text"
+                value={riderName}
+                onChange={e => setRiderName(e.target.value)}
+                placeholder="e.g. Ali Hassan"
+                className="input-dark w-full rounded-lg text-sm py-2.5 px-3"
+              />
+            </div>
+          )}
+
+          {/* Note */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8b9098' }}>
+              Customer Note <span style={{ color: '#565a6a' }}>(optional — auto-filled if empty)</span>
+            </label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              rows={2}
+              placeholder={AUTO_NOTES[status] || 'Add a note for the customer…'}
+              className="input-dark w-full rounded-lg text-sm py-2.5 px-3 resize-none"
+            />
+          </div>
+
+          {/* Custom tracking note */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8b9098' }}>
+              Tracking Update <span style={{ color: '#565a6a' }}>(shown on order page)</span>
+            </label>
+            <textarea
+              value={trackingNote}
+              onChange={e => setTrackingNote(e.target.value)}
+              rows={2}
+              placeholder={AUTO_NOTES[status] || 'e.g. Your package is in Lahore hub…'}
+              className="input-dark w-full rounded-lg text-sm py-2.5 px-3 resize-none"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+              style={{ background: 'rgba(34,37,46,0.70)', color: '#8b9098', border: '1px solid #2d3139' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={isLoading}
+              className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all"
+              style={{
+                background: isLoading ? '#2d3139' : `linear-gradient(135deg, ${st.color}, ${st.color}cc)`,
+                opacity: isLoading ? 0.6 : 1,
+              }}>
+              {isLoading ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function AdminOrdersPage() {
   const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPayment, setFilterPayment] = useState('');
   const [search, setSearch] = useState('');
-  const [updatingId, setUpdatingId] = useState(null);
+  const [modalOrder, setModalOrder] = useState(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-orders'],
@@ -34,13 +177,13 @@ export default function AdminOrdersPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, status }) => ordersApi.updateStatus(id, { status }),
+    mutationFn: ({ id, ...payload }) => ordersApi.updateStatus(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-orders']);
-      toast.success('Status updated');
-      setUpdatingId(null);
+      toast.success('Order updated');
+      setModalOrder(null);
     },
-    onError: () => toast.error('Could not update status'),
+    onError: () => toast.error('Could not update order'),
   });
 
   const orders = (data || []).filter(o => {
@@ -58,12 +201,20 @@ export default function AdminOrdersPage() {
   return (
     <div className="space-y-5">
 
+      {/* Modal */}
+      {modalOrder && (
+        <UpdateModal
+          order={modalOrder}
+          onClose={() => setModalOrder(null)}
+          onSave={updateMutation.mutate}
+          isLoading={updateMutation.isLoading}
+        />
+      )}
+
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold text-white">Orders</h1>
-        <p className="text-sm mt-0.5" style={{ color: '#8b9098' }}>
-          Manage fulfilment and payments
-        </p>
+        <p className="text-sm mt-0.5" style={{ color: '#8b9098' }}>Manage fulfilment and payments</p>
       </div>
 
       {/* Easypaisa alert */}
@@ -73,7 +224,7 @@ export default function AdminOrdersPage() {
           <svg className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          <div className="flex-1">
+          <div>
             <p className="text-sm font-semibold text-emerald-400">
               {easypaisaPending.length} Easypaisa payment{easypaisaPending.length > 1 ? 's' : ''} awaiting verification
             </p>
@@ -95,13 +246,11 @@ export default function AdminOrdersPage() {
             onChange={e => setSearch(e.target.value)}
             className="input-dark pl-9 pr-3 py-2 rounded-lg text-sm w-52" />
         </div>
-
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           className="input-dark py-2 rounded-lg text-sm" style={{ width: 160 }}>
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
         </select>
-
         <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
           className="input-dark py-2 rounded-lg text-sm" style={{ width: 150 }}>
           <option value="">All payments</option>
@@ -109,7 +258,6 @@ export default function AdminOrdersPage() {
           <option value="pending">Pending</option>
           <option value="failed">Failed</option>
         </select>
-
         {!isLoading && (
           <span className="text-xs font-medium px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(34,37,46,0.70)', color: '#8b9098', border: '1px solid #2d3139' }}>
             {orders.length} result{orders.length !== 1 ? 's' : ''}
@@ -137,18 +285,10 @@ export default function AdminOrdersPage() {
           <table className="w-full text-sm">
             <thead style={{ background: 'rgba(34,37,46,0.70)' }}>
               <tr>
-                {[
-                  { label: 'Order',          cls: '' },
-                  { label: 'Customer',       cls: 'hidden md:table-cell' },
-                  { label: 'Date',           cls: 'hidden lg:table-cell' },
-                  { label: 'Status',         cls: '' },
-                  { label: 'Payment',        cls: '' },
-                  { label: 'Total',          cls: '' },
-                  { label: '',               cls: '' },
-                ].map((h, i) => (
-                  <th key={i} className={`text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-wider ${h.cls}`}
+                {['Order','Customer','Date','Est. Delivery','Status','Payment','Total',''].map((h, i) => (
+                  <th key={i} className={`text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-wider ${['Customer','Date','Est. Delivery'].includes(h) ? 'hidden lg:table-cell' : ''}`}
                     style={{ color: '#8b9098', borderBottom: '1px solid #2d3139' }}>
-                    {h.label}
+                    {h}
                   </th>
                 ))}
               </tr>
@@ -166,7 +306,7 @@ export default function AdminOrdersPage() {
                       </span>
                     </td>
 
-                    <td className="px-5 py-3.5 hidden md:table-cell">
+                    <td className="px-5 py-3.5 hidden lg:table-cell">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 text-white"
                           style={{ background: '#3b82f6' }}>
@@ -182,21 +322,17 @@ export default function AdminOrdersPage() {
                       {new Date(order.created_at).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </td>
 
+                    <td className="px-5 py-3.5 hidden lg:table-cell text-xs tabular-nums" style={{ color: order.estimated_delivery ? '#10b981' : '#565a6a' }}>
+                      {order.estimated_delivery
+                        ? new Date(order.estimated_delivery + 'T00:00:00').toLocaleDateString('en-PK', { day: '2-digit', month: 'short' })
+                        : '—'}
+                    </td>
+
                     <td className="px-5 py-3.5">
-                      {updatingId === order.id ? (
-                        <select className="input-dark py-1.5 text-xs rounded-lg" style={{ width: 140 }}
-                          defaultValue={order.status}
-                          onChange={e => updateMutation.mutate({ id: order.id, status: e.target.value })}
-                          autoFocus onBlur={() => setUpdatingId(null)}>
-                          {STATUS_OPTIONS.map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
-                        </select>
-                      ) : (
-                        <button onClick={() => setUpdatingId(order.id)} title="Click to change"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide border cursor-pointer transition-opacity hover:opacity-80"
-                          style={{ background: st.bg, color: st.color, borderColor: st.border }}>
-                          {order.status}
-                        </button>
-                      )}
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide border"
+                        style={{ background: st.bg, color: st.color, borderColor: st.border }}>
+                        {order.status}
+                      </span>
                     </td>
 
                     <td className="px-5 py-3.5">
@@ -211,7 +347,7 @@ export default function AdminOrdersPage() {
                     </td>
 
                     <td className="px-5 py-3.5">
-                      <button onClick={() => setUpdatingId(order.id)}
+                      <button onClick={() => setModalOrder(order)}
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
                         style={{ background: 'rgba(34,37,46,0.70)', color: '#8b9098', border: '1px solid #2d3139' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#2d3139'; e.currentTarget.style.color = '#f1f2f4'; }}
