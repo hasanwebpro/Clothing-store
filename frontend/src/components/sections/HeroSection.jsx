@@ -145,7 +145,7 @@ export default function HeroSection() {
             }
           `}</style>
           <div className="hidden lg:block absolute bottom-0 animate-slide-right delay-300"
-            style={{ right: '-140px', height: '95%' }}>
+            style={{ right: '-240px', height: '95%' }}>
             <img
               src="/tommy.png"
               alt="Tommy Vercetti"

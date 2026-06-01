@@ -1,1 +1,0 @@
-import{a as e}from"./index-CFPlDyNh.js";const o={getOrders:()=>e.get("/orders/"),placeOrder:r=>e.post("/orders/place/",r),getOrder:r=>e.get(`/orders/${r}/`),cancelOrder:r=>e.post(`/orders/${r}/cancel/`),updateStatus:(r,t)=>e.patch(`/orders/${r}/status/`,t)};export{o};

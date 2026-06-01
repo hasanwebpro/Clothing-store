@@ -1,1 +1,0 @@
-import{a as t}from"./index-CFPlDyNh.js";const s={getHomepageReviews:()=>t.get("/reviews/homepage/"),getProductReviews:(e,i)=>t.get(`/reviews/products/${e}/`,{params:i}),createReview:(e,i)=>t.post(`/reviews/products/${e}/`,i),deleteReview:e=>t.delete(`/reviews/${e}/`)};export{s as r};
