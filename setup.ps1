@@ -315,8 +315,8 @@ Write-Host "   Close the server windows to stop." -ForegroundColor Gray
 Write-Host ""
 Start-Sleep -Seconds 1
 
-$backendBat  = Join-Path $ROOT "_start_backend.bat"
-$frontendBat = Join-Path $ROOT "_start_frontend.bat"
+$backendBat  = Join-Path $ROOT "scripts\_start_backend.bat"
+$frontendBat = Join-Path $ROOT "scripts\_start_frontend.bat"
 
 Start-Process "cmd.exe" -ArgumentList "/c `"$backendBat`"" -WindowStyle Normal
 Start-Sleep -Seconds 2
