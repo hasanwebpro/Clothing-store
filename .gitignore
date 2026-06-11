@@ -12,6 +12,9 @@ __pycache__/
 backend/.env
 frontend/.env
 backend/.cache/
+clothing_store.sql
+backend/.deps_hash
+frontend/.npm_hash
 
 # Generated / runtime
 backend/staticfiles/
