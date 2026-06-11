@@ -36,7 +36,7 @@ export default function AdminProductsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => productsApi.deleteProduct(id),
     onSuccess: () => { queryClient.invalidateQueries(['admin-products']); toast.success('Product deleted'); },
-    onError:   () => toast.error('Could not delete product'),
+    onError: (err) => toast.error(err?.response?.data?.message || err?.response?.data?.detail || 'Could not delete product'),
   });
 
   const products = (data || []).filter(p => {

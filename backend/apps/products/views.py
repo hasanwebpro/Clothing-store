@@ -119,6 +119,42 @@ class ProductByIdView(generics.RetrieveAPIView):
         return product
 
 
+class ProductAutocompleteView(APIView):
+    """GET /api/v1/products/autocomplete/?q=<query>
+    Returns up to 6 lightweight matches for the search-as-you-type dropdown.
+    Each result includes name, slug, image, price, and brand.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        q = request.query_params.get('q', '').strip()
+        if len(q) < 2:
+            return Response([])
+
+        from django.db.models import Q
+        qs = (
+            Product.objects
+            .filter(is_published=True)
+            .filter(Q(name__icontains=q) | Q(brand__icontains=q) | Q(tags__icontains=q))
+            .prefetch_related('images')
+            .only('id', 'name', 'slug', 'base_price', 'brand', 'average_rating')[:6]
+        )
+
+        results = []
+        for p in qs:
+            first_img = p.images.first()
+            results.append({
+                'id': p.id,
+                'name': p.name,
+                'slug': p.slug,
+                'brand': p.brand,
+                'price': float(p.base_price),
+                'rating': float(p.average_rating or 0),
+                'image': request.build_absolute_uri(first_img.image.url) if first_img else None,
+            })
+        return Response(results)
+
+
 class ProductFeaturedView(generics.ListAPIView):
     """GET /api/v1/products/featured/"""
     serializer_class = ProductListSerializer
@@ -151,6 +187,7 @@ class ProductCreateView(APIView):
         except ValueError as e:
             return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+        product_repo.invalidate_product_cache()
         return Response(
             ProductDetailSerializer(product, context={'request': request}).data,
             status=status.HTTP_201_CREATED,
@@ -167,6 +204,10 @@ class ProductUpdateView(generics.UpdateAPIView):
         self.check_object_permissions(self.request, product)
         return product
 
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        product_repo.invalidate_product_cache()
+
 
 class ProductDeleteView(APIView):
     """DELETE /api/v1/products/{id}/ [Admin only] — soft delete"""
@@ -174,6 +215,7 @@ class ProductDeleteView(APIView):
 
     def delete(self, request, pk):
         product_repo.soft_delete(pk)
+        product_repo.invalidate_product_cache()
         return Response({'message': 'Product unpublished.'}, status=status.HTTP_200_OK)
 
 

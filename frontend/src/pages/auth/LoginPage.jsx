@@ -10,7 +10,7 @@ const BRAND_PERKS = [
   { text: 'Exclusive member-only collections' },
   { text: 'Free delivery on orders over PKR 2,000' },
   { text: 'Easy 30-day returns & exchanges' },
-  { text: 'JazzCash, Easypaisa & COD accepted' },
+  { text: 'Easypaisa & COD accepted' },
 ];
 
 export default function LoginPage() {

@@ -43,6 +43,7 @@ LOCAL_APPS = [
     'apps.reviews',
     'apps.analytics',
     'apps.newsletter',
+    'apps.support',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -117,6 +118,23 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ─────────────────────────────────────────────────────────────
+# Cache — file-based, zero extra dependencies
+# Stores snapshots in BASE_DIR/.cache/ so they survive server
+# restarts. Upgrade to Redis in production by changing BACKEND
+# and adding LOCATION — no other code changes needed.
+# ─────────────────────────────────────────────────────────────
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': BASE_DIR / '.cache',
+        'TIMEOUT': 600,          # default TTL: 10 minutes
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+        },
+    }
+}
+
+# ─────────────────────────────────────────────────────────────
 # Django REST Framework
 # SDA Note: DRF is the "Controller + Serializer" layer in our MVC.
 # ─────────────────────────────────────────────────────────────
@@ -182,11 +200,6 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@clothingstore.com')
 
 # Payment gateways
-JAZZCASH_MERCHANT_ID = config('JAZZCASH_MERCHANT_ID', default='')
-JAZZCASH_PASSWORD = config('JAZZCASH_PASSWORD', default='')
-JAZZCASH_INTEGRITY_SALT = config('JAZZCASH_INTEGRITY_SALT', default='')
-JAZZCASH_RETURN_URL = config('JAZZCASH_RETURN_URL', default='http://localhost:3000/checkout/jazzcash-return')
-
 EASYPAISA_STORE_ID        = config('EASYPAISA_STORE_ID', default='')
 EASYPAISA_HASH_KEY        = config('EASYPAISA_HASH_KEY', default='')
 EASYPAISA_MERCHANT_PHONE  = config('EASYPAISA_MERCHANT_PHONE', default='+923092584328')

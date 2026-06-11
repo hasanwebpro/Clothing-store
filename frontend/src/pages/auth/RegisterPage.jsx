@@ -2,9 +2,53 @@ import { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { authApi } from '../../api/auth.api';
-
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 import toast from 'react-hot-toast';
+
+// Password strength: 0–3
+function passwordStrength(p) {
+  if (!p) return 0;
+  let score = 0;
+  if (p.length >= 8) score++;
+  if (/[A-Z]/.test(p) && /[a-z]/.test(p)) score++;
+  if (/\d/.test(p)) score++;
+  if (/[^A-Za-z0-9]/.test(p)) score++;
+  return Math.min(score, 3);
+}
+
+const STRENGTH_LABELS = ['', 'Weak', 'Fair', 'Strong'];
+const STRENGTH_COLORS = ['', '#ef4444', '#f59e0b', '#22c55e'];
+const STRENGTH_BG = ['bg-neutral-100', 'bg-red-400', 'bg-amber-400', 'bg-green-400'];
+
+function StrengthBar({ value }) {
+  return (
+    <div className="flex items-center gap-2 mt-1.5">
+      <div className="flex gap-1 flex-1">
+        {[1, 2, 3].map(i => (
+          <div key={i}
+            className={`h-1 flex-1 rounded-full transition-all duration-300 ${i <= value ? STRENGTH_BG[value] : 'bg-neutral-100'}`} />
+        ))}
+      </div>
+      {value > 0 && (
+        <span className="text-[11px] font-semibold transition-colors" style={{ color: STRENGTH_COLORS[value] }}>
+          {STRENGTH_LABELS[value]}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function FieldError({ msg }) {
+  if (!msg) return null;
+  return (
+    <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1.5">
+      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+      </svg>
+      {msg}
+    </p>
+  );
+}
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -12,10 +56,42 @@ export default function RegisterPage() {
   const [form, setForm] = useState({
     first_name: '', last_name: '', email: '', phone: '', password: '', confirm_password: '',
   });
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
+  const strength = passwordStrength(form.password);
+  const passwordsMatch = form.confirm_password && form.password === form.confirm_password;
+  const passwordsMismatch = form.confirm_password && form.password !== form.confirm_password;
+
+  const set = (key) => (e) => {
+    setForm(prev => ({ ...prev, [key]: e.target.value }));
+    setErrors(prev => ({ ...prev, [key]: undefined }));
+  };
+
+  // Validate a single field on blur
+  const validateField = (key) => {
+    const val = form[key];
+    let msg = '';
+    if (key === 'first_name' && !val.trim()) msg = 'First name is required';
+    if (key === 'last_name' && !val.trim()) msg = 'Last name is required';
+    if (key === 'email') {
+      if (!val.trim()) msg = 'Email is required';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) msg = 'Enter a valid email address';
+    }
+    if (key === 'phone' && val && !/^(03\d{9}|3\d{9})$/.test(val.replace(/[-\s]/g, '')))
+      msg = 'Enter a valid Pakistani mobile number (e.g. 03001234567)';
+    if (key === 'password') {
+      if (!val) msg = 'Password is required';
+      else if (val.length < 8) msg = 'Password must be at least 8 characters';
+    }
+    if (key === 'confirm_password') {
+      if (!val) msg = 'Please confirm your password';
+      else if (val !== form.password) msg = 'Passwords do not match';
+    }
+    if (msg) setErrors(prev => ({ ...prev, [key]: msg }));
+  };
 
   const handleGoogleCredential = useCallback(async (credential) => {
     setLoading(true);
@@ -33,20 +109,41 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (form.password !== form.confirm_password) { toast.error('Passwords do not match'); return; }
-    if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
+    // Run all validations
+    const newErrors = {};
+    if (!form.first_name.trim()) newErrors.first_name = 'First name is required';
+    if (!form.last_name.trim()) newErrors.last_name = 'Last name is required';
+    if (!form.email.trim()) newErrors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) newErrors.email = 'Enter a valid email address';
+    if (form.phone && !/^(03\d{9}|3\d{9})$/.test(form.phone.replace(/[-\s]/g, '')))
+      newErrors.phone = 'Enter a valid Pakistani mobile number';
+    if (!form.password) newErrors.password = 'Password is required';
+    else if (form.password.length < 8) newErrors.password = 'Password must be at least 8 characters';
+    if (form.password !== form.confirm_password) newErrors.confirm_password = 'Passwords do not match';
+
+    if (Object.keys(newErrors).length) {
+      setErrors(newErrors);
+      return;
+    }
+
     setLoading(true);
     try {
       await authApi.register({
-        first_name: form.first_name, last_name: form.last_name,
-        email: form.email, phone: form.phone, password: form.password,
+        first_name:       form.first_name.trim(),
+        last_name:        form.last_name.trim(),
+        email:            form.email.trim(),
+        phone:            form.phone.trim(),
+        password:         form.password,
+        password_confirm: form.confirm_password,
       });
-      await login(form.email, form.password);
+      await login(form.email.trim(), form.password);
       toast.success('Account created! Welcome to VOGUE!');
       navigate('/', { replace: true });
     } catch (err) {
       const data = err.response?.data;
-      if (data?.email) toast.error(`Email: ${data.email[0]}`);
+      if (data?.email)      setErrors(p => ({ ...p, email: data.email[0] }));
+      else if (data?.first_name) setErrors(p => ({ ...p, first_name: data.first_name[0] }));
+      else if (data?.password)   setErrors(p => ({ ...p, password: data.password[0] }));
       else toast.error(data?.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
@@ -67,9 +164,7 @@ export default function RegisterPage() {
             VOGUE<span style={{ background:'linear-gradient(135deg,#fff 0%,#ffd6ec 50%,#fff 100%)', backgroundSize:'200% auto', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text', animation:'shimmer 4s linear infinite' }}>.</span>
           </Link>
 
-          <p className="text-[10px] font-bold tracking-[0.25em] uppercase mb-4 text-white/70">
-            — Join The Vogue Family
-          </p>
+          <p className="text-[10px] font-bold tracking-[0.25em] uppercase mb-4 text-white/70">— Join The Vogue Family</p>
           <h2 className="font-display text-5xl font-bold tracking-tight leading-[1.05] mb-6"
             style={{ background:'linear-gradient(135deg,#fff 0%,#ffd6ec 40%,#fff 70%,#ffb3d9 100%)', backgroundSize:'200% auto', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text', animation:'shimmer 4s linear infinite', filter:'drop-shadow(0 0 12px rgba(255,180,210,0.9)) drop-shadow(0 0 28px rgba(255,100,160,0.6))' }}>
             Fashion that<br />fits your life.
@@ -102,45 +197,83 @@ export default function RegisterPage() {
 
         <div className="w-full max-w-md">
           <div className="mb-7">
-            <h1 className="font-display text-4xl font-semibold" style={{ background:'linear-gradient(135deg,#c0005a 0%,#EC6EAD 35%,#7b5ea7 65%,#3494E6 100%)', backgroundSize:'200% auto', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text', animation:'shimmer 4s linear infinite', filter:'drop-shadow(0 0 8px rgba(236,110,173,0.4))' }}>Create account</h1>
+            <h1 className="font-display text-4xl font-semibold"
+              style={{ background:'linear-gradient(135deg,#c0005a 0%,#EC6EAD 35%,#7b5ea7 65%,#3494E6 100%)', backgroundSize:'200% auto', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text', animation:'shimmer 4s linear infinite', filter:'drop-shadow(0 0 8px rgba(236,110,173,0.4))' }}>
+              Create account
+            </h1>
             <p className="mt-2 text-neutral-500 text-sm">Start shopping today — it's completely free</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+
+            {/* Name row */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="label">First name</label>
-                <input type="text" className="input" placeholder="Ali" value={form.first_name} onChange={set('first_name')} required />
+                <label className="label">First name <span className="text-red-400">*</span></label>
+                <input type="text" className={`input ${errors.first_name ? 'border-red-400 focus:border-red-400' : ''}`}
+                  placeholder="Ali" value={form.first_name}
+                  onChange={set('first_name')} onBlur={() => validateField('first_name')}
+                  autoComplete="given-name" />
+                <FieldError msg={errors.first_name} />
               </div>
               <div>
-                <label className="label">Last name</label>
-                <input type="text" className="input" placeholder="Khan" value={form.last_name} onChange={set('last_name')} required />
+                <label className="label">Last name <span className="text-red-400">*</span></label>
+                <input type="text" className={`input ${errors.last_name ? 'border-red-400 focus:border-red-400' : ''}`}
+                  placeholder="Khan" value={form.last_name}
+                  onChange={set('last_name')} onBlur={() => validateField('last_name')}
+                  autoComplete="family-name" />
+                <FieldError msg={errors.last_name} />
               </div>
             </div>
 
+            {/* Email */}
             <div>
-              <label className="label">Email address</label>
-              <input type="email" className="input" placeholder="you@example.com" value={form.email} onChange={set('email')} required autoComplete="email" />
+              <label className="label">Email address <span className="text-red-400">*</span></label>
+              <input type="email" className={`input ${errors.email ? 'border-red-400 focus:border-red-400' : ''}`}
+                placeholder="you@example.com" value={form.email}
+                onChange={set('email')} onBlur={() => validateField('email')}
+                autoComplete="email" />
+              <FieldError msg={errors.email} />
             </div>
 
+            {/* Phone with +92 prefix */}
             <div>
               <label className="label">
-                Phone number{' '}
-                <span className="text-neutral-400 font-normal text-xs">(optional)</span>
+                Phone number
+                <span className="text-neutral-400 font-normal text-xs ml-1">(optional)</span>
               </label>
-              <input type="tel" className="input" placeholder="03xx-xxxxxxx" value={form.phone} onChange={set('phone')} />
+              <div className="flex gap-0">
+                <div className="flex items-center px-3 rounded-l-xl border border-r-0 bg-neutral-50 text-neutral-500 text-sm select-none flex-shrink-0"
+                  style={{ borderColor: 'rgba(26,27,42,0.13)' }}>
+                  🇵🇰 +92
+                </div>
+                <input type="tel" inputMode="numeric"
+                  className={`input rounded-l-none flex-1 ${errors.phone ? 'border-red-400 focus:border-red-400' : ''}`}
+                  placeholder="3001234567"
+                  value={form.phone}
+                  onChange={e => {
+                    const v = e.target.value.replace(/[^\d]/g, '').slice(0, 10);
+                    setForm(p => ({ ...p, phone: v }));
+                    setErrors(p => ({ ...p, phone: undefined }));
+                  }}
+                  onBlur={() => validateField('phone')}
+                  autoComplete="tel-national"
+                />
+              </div>
+              <FieldError msg={errors.phone} />
             </div>
 
+            {/* Password */}
             <div>
-              <label className="label">Password</label>
+              <label className="label">Password <span className="text-red-400">*</span></label>
               <div className="relative">
                 <input
                   type={showPass ? 'text' : 'password'}
-                  className="input pr-11"
+                  className={`input pr-11 ${errors.password ? 'border-red-400 focus:border-red-400' : ''}`}
                   placeholder="Min. 8 characters"
                   value={form.password}
                   onChange={set('password')}
-                  required minLength={8}
+                  onBlur={() => validateField('password')}
                   autoComplete="new-password"
                 />
                 <button type="button" onClick={() => setShowPass(v => !v)}
@@ -154,11 +287,44 @@ export default function RegisterPage() {
                   </svg>
                 </button>
               </div>
+              {form.password && <StrengthBar value={strength} />}
+              <FieldError msg={errors.password} />
             </div>
 
+            {/* Confirm password */}
             <div>
-              <label className="label">Confirm password</label>
-              <input type="password" className="input" placeholder="••••••••" value={form.confirm_password} onChange={set('confirm_password')} required autoComplete="new-password" />
+              <label className="label">Confirm password <span className="text-red-400">*</span></label>
+              <div className="relative">
+                <input
+                  type={showConfirm ? 'text' : 'password'}
+                  className={`input pr-11 ${errors.confirm_password || passwordsMismatch ? 'border-red-400 focus:border-red-400' : passwordsMatch ? 'border-green-400 focus:border-green-400' : ''}`}
+                  placeholder="Re-enter password"
+                  value={form.confirm_password}
+                  onChange={set('confirm_password')}
+                  onBlur={() => validateField('confirm_password')}
+                  autoComplete="new-password"
+                />
+                {/* Match indicator */}
+                {form.confirm_password && (
+                  <span className="absolute right-9 top-1/2 -translate-y-1/2">
+                    {passwordsMatch
+                      ? <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                      : <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    }
+                  </span>
+                )}
+                <button type="button" onClick={() => setShowConfirm(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 cursor-pointer transition-colors"
+                  aria-label="Toggle password visibility">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    {showConfirm
+                      ? <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      : <><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></>
+                    }
+                  </svg>
+                </button>
+              </div>
+              <FieldError msg={errors.confirm_password} />
             </div>
 
             <button type="submit" disabled={loading} className="btn-luxe w-full justify-center py-3.5 text-base mt-2"

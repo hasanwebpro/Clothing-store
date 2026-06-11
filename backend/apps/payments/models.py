@@ -36,8 +36,8 @@ from django.db import models
 class PaymentTransaction(models.Model):
     GATEWAY_CHOICES = [
         ('cod', 'Cash on Delivery'),
-        ('jazzcash', 'JazzCash'),
         ('easypaisa', 'Easypaisa'),
+        ('card', 'Credit / Debit Card'),
     ]
     STATUS_CHOICES = [
         ('pending', 'Pending'),

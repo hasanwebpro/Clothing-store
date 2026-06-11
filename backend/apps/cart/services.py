@@ -1,32 +1,22 @@
 """
-CartService — business logic for cart operations.
+Pattern   : Service Layer  (Architectural — Fowler, PEAA)
+----------------------------------------------------------
+What it does : CartService is the single entry point for all cart operations
+               — add, remove, merge on login, apply coupon, calculate totals.
+               It combines two other patterns internally:
+                 Decorator — delegates pricing/coupon math to CartPriceCalculator
+                 Price Snapshot — saves unit_price at add-time, not a live FK,
+                                  so promotions never retroactively change old carts
 
-MVC ROLE
---------
-SERVICE LAYER — sits between the Controller (CartView) and the data layer
-(Cart / CartItem / Inventory models). The view is "thin"; this is where the
-domain rules live.
+Why we used it: Without this layer, CartView would need to know about stock
+               validation, price snapshotting, coupon math, and cart merging.
+               That makes the view fat, untestable, and duplicates logic every
+               time a new caller (mobile app, management command) is added.
 
-PROBLEM IT SOLVES
------------------
-Without this layer, the View would have to know about: stock validation,
-price snapshotting, coupon math, cart-merging on login, etc. That makes
-views fat, untestable, and duplicates logic when a new caller (e.g., a
-mobile app) appears.
-
-PATTERNS APPLIED
-----------------
-• Service Layer       — a single class is the "front door" for cart ops
-• Decorator (via      — CartPriceCalculator (the pricing decorator stack)
-   CartPriceCalculator)  handles coupon and discount math
-• Observer (indirect) — CartService doesn't notify directly; OrderService
-                        will fire 'order.placed' when the cart is checked out
-
-BENEFITS
---------
-• Reusable from REST views, GraphQL, management commands, tests
-• Easy to swap stock-checking provider (e.g., warehouse API)
-• Single place to add features (gift wrapping, scheduled delivery, etc.)
+Why preferred : One file, one class, one responsibility. Any caller — REST view,
+               GraphQL, background task, test suite — goes through CartService
+               and gets the same business rules. Swapping the stock-check source
+               or adding gift-wrapping touches exactly one place.
 """
 from django.db import transaction
 from apps.inventory.models import Inventory
@@ -123,9 +113,31 @@ class CartService:
         # DB trigger trg_cart_delete_release handles quantity_reserved on DELETE.
         CartItem.objects.filter(id=item_id, cart=cart).delete()
 
+    # ── Save for later ───────────────────────────────────────────────────────
+    @transaction.atomic
+    def save_for_later(self, user, item_id: int) -> CartItem:
+        """Move an active cart line into the 'saved for later' list."""
+        cart = self.get_or_create_cart(user)
+        item = CartItem.objects.select_for_update().get(id=item_id, cart=cart)
+        item.saved_for_later = True
+        item.save(update_fields=['saved_for_later'])
+        return item
+
+    @transaction.atomic
+    def move_to_cart(self, user, item_id: int) -> CartItem:
+        """Move a saved item back into the active cart (re-checks stock)."""
+        cart = self.get_or_create_cart(user)
+        item = CartItem.objects.select_for_update().get(id=item_id, cart=cart)
+        available = item.variant.inventory.available
+        if available < item.quantity:
+            raise InsufficientStockError(item.variant.sku, item.quantity, available)
+        item.saved_for_later = False
+        item.save(update_fields=['saved_for_later'])
+        return item
+
     def apply_coupon(self, user, coupon_code: str) -> dict:
         cart = self.get_or_create_cart(user)
-        cart_items = list(cart.items.values('unit_price', 'quantity'))
+        cart_items = list(cart.items.filter(saved_for_later=False).values('unit_price', 'quantity'))
         result = price_calculator.calculate_cart(cart_items, coupon_code)
 
         if result['coupon']:
@@ -141,13 +153,14 @@ class CartService:
 
     def get_cart_totals(self, user) -> dict:
         cart = self.get_or_create_cart(user)
-        cart_items = list(cart.items.values('unit_price', 'quantity'))
+        cart_items = list(cart.items.filter(saved_for_later=False).values('unit_price', 'quantity'))
         return price_calculator.calculate_cart(cart_items, cart.coupon_code)
 
     def clear_cart(self, user) -> None:
         cart = self.get_or_create_cart(user)
+        # Only clear ACTIVE items — saved-for-later items persist across checkouts.
         # DB trigger trg_cart_delete_release fires per-row and releases
         # quantity_reserved automatically as each item is deleted.
-        cart.items.all().delete()
+        cart.items.filter(saved_for_later=False).delete()
         cart.coupon_code = None
         cart.save()

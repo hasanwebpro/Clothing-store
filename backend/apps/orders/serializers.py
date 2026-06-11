@@ -32,7 +32,7 @@ INPUT SERIALIZERS (write-only validators):
 """
 from rest_framework import serializers
 from apps.users.serializers import AddressSerializer
-from .models import Order, OrderItem, OrderStatusHistory
+from .models import Order, OrderItem, OrderStatusHistory, OrderReturn
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -49,10 +49,47 @@ class OrderStatusHistorySerializer(serializers.ModelSerializer):
         fields = ['old_status', 'new_status', 'note', 'changed_by_name', 'changed_at']
 
 
+# ── Return serializers ───────────────────────────────────────────────────────
+# Same Read/Write split as the order serializers above:
+#   OrderReturnSerializer  → read DTO (embeds *_display labels for the UI)
+#   CreateReturnSerializer → write validator for the customer's POST
+#   ResolveReturnSerializer→ write validator for the staff PATCH (status workflow)
+# read_only_fields on OrderReturnSerializer stop a customer from setting their
+# own status/admin_note — those are driven only through OrderService.
+class OrderReturnSerializer(serializers.ModelSerializer):
+    kind_display = serializers.CharField(source='get_kind_display', read_only=True)
+    reason_display = serializers.CharField(source='get_reason_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    order_number = serializers.CharField(source='order.order_number', read_only=True)
+
+    class Meta:
+        model = OrderReturn
+        fields = [
+            'id', 'order', 'order_number', 'kind', 'kind_display', 'reason', 'reason_display',
+            'status', 'status_display', 'customer_note', 'admin_note',
+            'created_at', 'resolved_at',
+        ]
+        read_only_fields = ['status', 'admin_note', 'resolved_at']
+
+
+class CreateReturnSerializer(serializers.Serializer):
+    kind = serializers.ChoiceField(choices=['return', 'refund', 'exchange'])
+    reason = serializers.ChoiceField(choices=[
+        'wrong_size', 'damaged', 'wrong_item', 'not_as_described', 'changed_mind', 'other',
+    ])
+    customer_note = serializers.CharField(required=False, default='', allow_blank=True)
+
+
+class ResolveReturnSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=['approved', 'rejected', 'completed'])
+    admin_note = serializers.CharField(required=False, default='', allow_blank=True)
+
+
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     status_history = OrderStatusHistorySerializer(many=True, read_only=True)
     shipping_address = AddressSerializer(read_only=True)
+    returns = OrderReturnSerializer(many=True, read_only=True)
 
     class Meta:
         model = Order
@@ -61,7 +98,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'subtotal', 'shipping_cost', 'discount_amount', 'total_amount',
             'coupon_code', 'shipping_address', 'notes',
             'estimated_delivery', 'rider_name', 'tracking_note',
-            'items', 'status_history', 'created_at', 'updated_at',
+            'items', 'status_history', 'returns', 'created_at', 'updated_at',
         ]
 
 

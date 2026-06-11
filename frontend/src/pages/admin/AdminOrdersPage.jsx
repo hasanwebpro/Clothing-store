@@ -183,7 +183,7 @@ export default function AdminOrdersPage() {
       toast.success('Order updated');
       setModalOrder(null);
     },
-    onError: () => toast.error('Could not update order'),
+    onError: (err) => toast.error(err?.response?.data?.message || err?.response?.data?.detail || 'Could not update order'),
   });
 
   const orders = (data || []).filter(o => {

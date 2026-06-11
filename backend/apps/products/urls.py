@@ -14,6 +14,7 @@ urlpatterns = [
     # ── Public product endpoints ─────────────────────────────────────────
     path('',                   views.ProductListView.as_view(),         name='product-list'),
     path('featured/',          views.ProductFeaturedView.as_view(),     name='product-featured'),
+    path('autocomplete/',      views.ProductAutocompleteView.as_view(), name='product-autocomplete'),
     path('mine/',              views.SellerProductListView.as_view(),   name='seller-products'),
 
     # ── Categories (must come before the slug catch-all) ─────────────────

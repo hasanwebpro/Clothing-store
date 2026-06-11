@@ -28,7 +28,7 @@ export default function AdminUsersPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => authApi.updateUser(id, data),
     onSuccess: () => { queryClient.invalidateQueries(['admin-users']); toast.success('User updated'); },
-    onError:   () => toast.error('Could not update user'),
+    onError: (err) => toast.error(err?.response?.data?.message || err?.response?.data?.detail || 'Could not update user'),
   });
 
   const users = (data || []).filter((u) => {

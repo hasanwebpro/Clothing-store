@@ -150,14 +150,19 @@
 
   /* ── Inputs ──────────────────────────────────────────────────────────── */
   .input {
-    @apply block w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm
+    @apply block w-full rounded-xl border px-4 py-3 text-sm
            text-neutral-900 placeholder-neutral-400 bg-white
            transition-all duration-200
-           focus:border-ink-400 focus:outline-none focus:ring-2 focus:ring-ink-900/10
+           focus:outline-none
            disabled:bg-neutral-50 disabled:cursor-not-allowed;
+    border-color: rgba(26,27,42,0.13);
+  }
+  .input:hover:not(:focus):not(:disabled) {
+    border-color: rgba(26,27,42,0.22);
   }
   .input:focus {
-    box-shadow: 0 0 0 3px rgba(14,2,40,0.06), 0 2px 8px rgba(14,2,40,0.04);
+    border-color: #ff006e;
+    box-shadow: 0 0 0 3px rgba(255,0,110,0.10), 0 0 12px rgba(0,212,212,0.07);
   }
 
   /* Glass input (for dark auth/checkout) */
@@ -346,6 +351,10 @@
 @keyframes particleRise { 0%{transform:translateY(100vh) scale(0);opacity:0} 10%{opacity:1} 90%{opacity:.4} 100%{transform:translateY(-10vh) scale(1.5);opacity:0} }
 @keyframes pingOnce     { 0%{transform:scale(1);opacity:1} 75%{transform:scale(2);opacity:0} 100%{transform:scale(2);opacity:0} }
 @keyframes goldGlow     { 0%,100%{text-shadow:0 0 8px rgba(0,212,212,.4)} 50%{text-shadow:0 0 24px rgba(0,212,212,.9),0 0 48px rgba(0,212,212,.4)} }
+@keyframes skeleton-sweep { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes splash-bar   { 0%{width:0%} 60%{width:75%} 85%{width:88%} 100%{width:100%} }
+@keyframes splash-fade  { 0%{opacity:1;transform:scale(1)} 80%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(1.03)} }
+@keyframes tommy-rise   { from{opacity:0;transform:translateY(60px)} to{opacity:1;transform:translateY(0)} }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ANIMATION HELPERS

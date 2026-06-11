@@ -13,12 +13,17 @@
  * - Always one swipe-up away when the user wants it back
  * - Glass treatment keeps the navbar luxurious instead of "browser chrome"
  */
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { useNotifications } from '../../context/NotificationContext';
 import CartDrawer from '../cart/CartDrawer';
+import { productsApi } from '../../api/products.api';
+import {
+  IconShoppingCart, IconCheckCircle, IconTruck, IconHome,
+  IconXCircle, IconCreditCard, IconExclamationTriangle, IconStar, IconBell,
+} from '../ui/Icons';
 
 const NAV_LINKS = [
   { label: 'Women',       to: '/category/women' },
@@ -30,18 +35,52 @@ const NAV_LINKS = [
   { label: 'About',       to: '/about' },
 ];
 
+const NOTIF_ICON = {
+  order_placed:      <IconShoppingCart className="w-4 h-4 text-brand-500" />,
+  order_confirmed:   <IconCheckCircle className="w-4 h-4 text-emerald-500" />,
+  order_shipped:     <IconTruck className="w-4 h-4 text-blue-500" />,
+  order_delivered:   <IconHome className="w-4 h-4 text-violet-500" />,
+  order_cancelled:   <IconXCircle className="w-4 h-4 text-red-500" />,
+  payment_confirmed: <IconCreditCard className="w-4 h-4 text-teal-500" />,
+  low_stock:         <IconExclamationTriangle className="w-4 h-4 text-amber-500" />,
+  review_approved:   <IconStar className="w-4 h-4 text-yellow-400" filled />,
+};
+
+function timeAgo(dateStr) {
+  const diff = (Date.now() - new Date(dateStr)) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
 export default function Navbar() {
   const { isAuthenticated, user, logout } = useAuth();
   const { itemCount } = useCart();
-  const { unreadCount } = useNotifications();
+  const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [hidden, setHidden] = useState(false);
   const lastScrollY = useRef(0);
+  const debounceRef = useRef(null);
+  const searchRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Close notification dropdown on route change or outside click
+  useEffect(() => { setNotifOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!notifOpen) return;
+    const close = (e) => { if (!e.target.closest('[data-notif-root]')) setNotifOpen(false); };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [notifOpen]);
 
   // Smart show/hide on scroll
   useEffect(() => {
@@ -60,9 +99,47 @@ export default function Navbar() {
   // Close mobile menu on route change
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
 
+  // Close suggestions on outside click
+  useEffect(() => {
+    const close = (e) => { if (!searchRef.current?.contains(e.target)) setSuggestOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  // Close suggestions on route change
+  useEffect(() => { setSuggestOpen(false); setSuggestions([]); setSearchQuery(''); }, [location.pathname]);
+
+  // Debounced autocomplete fetch
+  const fetchSuggestions = useCallback((q) => {
+    clearTimeout(debounceRef.current);
+    if (q.length < 2) { setSuggestions([]); setSuggestOpen(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      setSuggestLoading(true);
+      try {
+        const res = await productsApi.autocomplete(q);
+        setSuggestions(res.data || []);
+        setSuggestOpen(true);
+      } catch { setSuggestions([]); }
+      finally { setSuggestLoading(false); }
+    }, 250);
+  }, []);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    fetchSuggestions(val);
+  };
+
   const handleSearch = (e) => {
     e.preventDefault();
+    setSuggestOpen(false);
     if (searchQuery.trim()) navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+  };
+
+  const handleSuggestionClick = (slug) => {
+    setSuggestOpen(false);
+    setSearchQuery('');
+    navigate(`/products/${slug}`);
   };
 
   const handleLogout = async () => {
@@ -112,29 +189,78 @@ export default function Navbar() {
                 </span>
               </Link>
 
-              {/* ── Center: search ─────────────────────────────────── */}
-              <form onSubmit={handleSearch} className="flex-1 max-w-lg hidden md:flex">
+              {/* ── Center: search with autocomplete ───────────────── */}
+              <form onSubmit={handleSearch} className="flex-1 max-w-lg hidden md:flex" ref={searchRef}>
                 <div className="relative w-full">
                   <input
                     type="search"
                     placeholder="Search luxury fashion…"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={handleSearchChange}
+                    onFocus={() => suggestions.length > 0 && setSuggestOpen(true)}
                     className={`w-full rounded-full border py-2 pl-10 pr-4 text-sm transition-all duration-300 focus:outline-none focus:ring-2 ${
                       isHomeAtTop
                         ? 'bg-white/10 border-white/15 text-white placeholder-white/50 focus:bg-white/15 focus:ring-luxe-400/40'
                         : 'bg-white/60 border-neutral-200/80 text-ink-900 placeholder-neutral-400 focus:bg-white focus:ring-brand-400/40 focus:border-brand-300'
                     }`}
+                    autoComplete="off"
                   />
-                  <button
-                    type="submit"
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 ${isHomeAtTop ? 'text-white/60 hover:text-white' : 'text-neutral-400 hover:text-ink-900'} transition-colors`}
-                    aria-label="Search"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </button>
+                  {/* Search icon / spinner */}
+                  <span className={`absolute left-3 top-1/2 -translate-y-1/2 ${isHomeAtTop ? 'text-white/60' : 'text-neutral-400'}`}>
+                    {suggestLoading
+                      ? <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                      : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    }
+                  </span>
+
+                  {/* Autocomplete dropdown */}
+                  {suggestOpen && suggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-neutral-100 overflow-hidden z-50">
+                      <ul>
+                        {suggestions.map((item) => (
+                          <li key={item.id}>
+                            <button
+                              type="button"
+                              onClick={() => handleSuggestionClick(item.slug)}
+                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors text-left group"
+                            >
+                              {/* Product image */}
+                              <div className="w-12 h-12 rounded-xl overflow-hidden bg-neutral-100 flex-shrink-0">
+                                {item.image
+                                  ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                  : <div className="w-full h-full flex items-center justify-center">
+                                      <svg className="w-5 h-5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                    </div>
+                                }
+                              </div>
+                              {/* Info */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-neutral-900 truncate group-hover:text-brand-600 transition-colors">{item.name}</p>
+                                {item.brand && <p className="text-xs text-neutral-400 truncate">{item.brand}</p>}
+                              </div>
+                              {/* Price + rating */}
+                              <div className="flex-shrink-0 text-right">
+                                <p className="text-sm font-bold text-brand-600">PKR {item.price.toLocaleString()}</p>
+                                {item.rating > 0 && (
+                                  <p className="text-xs text-amber-500 flex items-center justify-end gap-0.5">
+                                    <svg className="w-3 h-3 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                                    {item.rating.toFixed(1)}
+                                  </p>
+                                )}
+                              </div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      {/* See all results link */}
+                      <button
+                        type="submit"
+                        className="w-full px-4 py-3 text-sm text-brand-600 font-semibold bg-neutral-50 hover:bg-brand-50 transition-colors border-t border-neutral-100 text-center"
+                      >
+                        See all results for "{searchQuery}" →
+                      </button>
+                    </div>
+                  )}
                 </div>
               </form>
 
@@ -154,6 +280,66 @@ export default function Navbar() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                     </svg>
                   </Link>
+                )}
+
+                {/* Notifications (auth only) */}
+                {isAuthenticated && (
+                  <div className="relative" data-notif-root>
+                    <button
+                      onClick={() => setNotifOpen((v) => !v)}
+                      aria-label={`Notifications (${unreadCount} unread)`}
+                      className={`relative w-10 h-10 flex items-center justify-center rounded-full transition-colors ${
+                        isHomeAtTop ? 'text-white hover:bg-white/10' : 'text-ink-900 hover:bg-neutral-100'
+                      }`}
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                      </svg>
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1 right-1 flex items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-luxe-500 text-[10px] font-bold text-white ring-2 ring-white shadow-md min-w-[18px] h-[18px] px-1">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
+
+                    {notifOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] glass-card rounded-2xl py-2 z-50 shadow-xl">
+                        <div className="px-4 py-2 flex items-center justify-between border-b border-neutral-100/80">
+                          <p className="text-sm font-bold text-ink-900">Notifications</p>
+                          {unreadCount > 0 && (
+                            <button onClick={() => markAllRead()} className="text-[11px] font-semibold text-brand-600 hover:text-brand-700">
+                              Mark all read
+                            </button>
+                          )}
+                        </div>
+                        <div className="max-h-96 overflow-y-auto">
+                          {(!notifications || notifications.length === 0) ? (
+                            <div className="px-4 py-10 text-center">
+                              <div className="w-10 h-10 rounded-full bg-neutral-50 flex items-center justify-center mx-auto mb-2">
+                                <IconBell className="w-5 h-5 text-neutral-300" />
+                              </div>
+                              <p className="text-sm text-neutral-400">No notifications yet</p>
+                            </div>
+                          ) : (
+                            notifications.map((n) => (
+                              <button key={n.id} onClick={() => !n.is_read && markRead(n.id)}
+                                className={`w-full text-left px-4 py-3 flex gap-3 transition-colors hover:bg-neutral-50 ${n.is_read ? '' : 'bg-brand-50/40'}`}>
+                                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center flex-shrink-0 border border-neutral-100">
+                                  {NOTIF_ICON[n.type] || <IconBell className="w-4 h-4 text-neutral-400" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-ink-900 leading-tight">{n.title}</p>
+                                  {n.body && <p className="text-xs text-neutral-500 mt-0.5 line-clamp-2">{n.body}</p>}
+                                  <p className="text-[10px] text-neutral-400 mt-1">{timeAgo(n.created_at)}</p>
+                                </div>
+                                {!n.is_read && <span className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0 mt-1.5" />}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Cart */}

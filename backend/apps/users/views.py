@@ -155,7 +155,23 @@ class CookieTokenRefreshView(APIView):
         # simplejwt returns a new refresh token when ROTATE_REFRESH_TOKENS=True
         new_refresh = serializer.validated_data.get('refresh', refresh_token)
 
-        response = Response({'access': str(new_access)}, status=status.HTTP_200_OK)
+        # Decode the new access token to get the user_id, then fetch the user
+        # profile. This lets the frontend restore full session state even when
+        # localStorage was cleared (e.g. browser closed with privacy settings).
+        from rest_framework_simplejwt.tokens import AccessToken as _AT
+        from .serializers import UserProfileSerializer
+        from django.contrib.auth import get_user_model
+        try:
+            decoded = _AT(str(new_access))
+            user = get_user_model().objects.get(pk=decoded['user_id'])
+            user_data = UserProfileSerializer(user, context={'request': request}).data
+        except Exception:
+            user_data = None
+
+        response = Response(
+            {'access': str(new_access), 'user': user_data},
+            status=status.HTTP_200_OK,
+        )
         _set_refresh_cookie(response, str(new_refresh))
         return response
 
@@ -272,6 +288,11 @@ class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return address_repo.get_user_addresses(self.request.user.id)
+
+    def perform_destroy(self, instance):
+        # Soft-delete so existing orders retain their shipping_address FK.
+        # Hard-delete would raise ProtectedError for any address used in an order.
+        address_repo.soft_delete(instance.pk, self.request.user.id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

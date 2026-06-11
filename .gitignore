@@ -11,6 +11,7 @@ __pycache__/
 # Real secrets — NEVER commit
 backend/.env
 frontend/.env
+backend/.cache/
 
 # Generated / runtime
 backend/staticfiles/

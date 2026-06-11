@@ -2,7 +2,9 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 const nav = [
   { to: '/account/orders', label: 'My Orders' },
+  { to: '/account/returns', label: 'Returns & Refunds' },
   { to: '/account/wishlist', label: 'Wishlist' },
+  { to: '/account/addresses', label: 'Addresses' },
   { to: '/account/settings', label: 'Account Settings' },
 ];
 

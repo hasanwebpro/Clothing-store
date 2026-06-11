@@ -6,6 +6,7 @@ import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSEO } from '../../hooks/useSEO';
 import ProductReviews from '../../components/product/ProductReviews';
+import { Skeleton } from '../../components/ui/Skeleton';
 import toast from 'react-hot-toast';
 
 const SHIMMER = {
@@ -55,15 +56,29 @@ export default function ProductDetailPage() {
 
   if (isLoading) return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="grid md:grid-cols-2 gap-12">
+      <div className="grid md:grid-cols-2 gap-10 lg:gap-16">
         <div className="space-y-3">
-          <div className="aspect-square bg-neutral-100 rounded-2xl animate-pulse" />
+          <Skeleton className="aspect-square w-full rounded-2xl" />
           <div className="grid grid-cols-4 gap-2">
-            {[...Array(4)].map((_,i) => <div key={i} className="aspect-square bg-neutral-100 rounded-lg animate-pulse" />)}
+            {[...Array(4)].map((_,i) => <Skeleton key={i} className="aspect-square rounded-xl" />)}
           </div>
         </div>
-        <div className="space-y-4 pt-4">
-          {[...Array(6)].map((_,i) => <div key={i} className={`h-${i===0?'8':i===1?'6':'4'} bg-neutral-100 rounded animate-pulse`} style={{ width:`${[60,40,80,60,100,70][i]}%` }} />)}
+        <div className="space-y-5 pt-4">
+          <Skeleton className="h-3 w-20 rounded-full" />
+          <Skeleton className="h-9 w-3/4 rounded-xl" />
+          <div className="flex gap-1">{[...Array(5)].map((_,i) => <Skeleton key={i} className="w-4 h-4 rounded" />)}</div>
+          <Skeleton className="h-14 w-full rounded-2xl" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-16 rounded-full" />
+            <div className="flex gap-2">{[...Array(4)].map((_,i) => <Skeleton key={i} className="h-10 w-16 rounded-xl" />)}</div>
+          </div>
+          <div className="flex gap-3">
+            <Skeleton className="flex-1 h-14 rounded-xl" />
+            <Skeleton className="flex-1 h-14 rounded-xl" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[...Array(4)].map((_,i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
+          </div>
         </div>
       </div>
     </div>

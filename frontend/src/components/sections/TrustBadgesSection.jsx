@@ -56,7 +56,7 @@ const TRUST_ITEMS = [
     ),
   },
   {
-    title: 'JazzCash & COD',
+    title: 'Easypaisa & COD',
     desc: 'Pay your preferred way',
     icon: (
       <svg className="w-6 h-6 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -66,7 +66,7 @@ const TRUST_ITEMS = [
   },
 ];
 
-const PAYMENT_BADGES = ['JazzCash', 'Easypaisa', 'COD', 'Bank Transfer'];
+const PAYMENT_BADGES = ['Easypaisa', 'COD', 'Bank Transfer'];
 
 export default function TrustBadgesSection() {
   const { ref, className } = useRevealClass();

@@ -19,6 +19,5 @@ export const PAYMENT_STATUS = {
 
 export const PAYMENT_METHODS = {
   cod: 'Cash on Delivery',
-  jazzcash: 'JazzCash',
-  easypaisa: 'Easypaisa',
+easypaisa: 'Easypaisa',
 };

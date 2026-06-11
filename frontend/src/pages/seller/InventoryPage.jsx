@@ -24,7 +24,7 @@ export default function InventoryPage() {
     mutationFn: ({ variantId, qty, note }) =>
       inventoryApi.restock(variantId, { movement: parseInt(qty) >= 0 ? 'restock' : 'adjustment', quantity: parseInt(qty), note }),
     onSuccess: () => { queryClient.invalidateQueries(['inventory']); toast.success('Stock updated'); setEditingId(null); setEditQty(''); setEditNote(''); },
-    onError: () => toast.error('Could not update stock'),
+    onError: (err) => toast.error(err?.response?.data?.message || err?.response?.data?.detail || 'Could not update stock'),
   });
 
   const inventory = data || [];

@@ -53,7 +53,7 @@ export default function AdminCouponsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => couponsApi.deleteCoupon(id),
     onSuccess: () => { queryClient.invalidateQueries(['admin-coupons']); toast.success('Coupon deleted'); },
-    onError:   () => toast.error('Could not delete coupon'),
+    onError: (err) => toast.error(err?.response?.data?.message || err?.response?.data?.detail || 'Could not delete coupon'),
   });
 
   const set = (key) => (e) => {

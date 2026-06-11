@@ -1,8 +1,11 @@
 """
-MVC ROLE: MODEL — represents Order, its line items, and its status audit trail.
+MVC ROLE: MODEL — represents Order, its line items, status audit trail, and returns.
 DESIGN PATTERNS APPLIED:
   • Snapshot / Memento — OrderItem captures product_name and sku at purchase time
   • Audit Log          — OrderStatusHistory records every status transition immutably
+  • State Machine      — OrderReturn moves through requested → approved/rejected →
+                         completed, with the legal transitions enforced in the
+                         OrderService (see resolve_return)
 
 SNAPSHOT PATTERN (OrderItem):
 -------------------------------
@@ -150,3 +153,61 @@ class OrderStatusHistory(models.Model):
     class Meta:
         db_table = 'order_status_history'
         ordering = ['changed_at']
+
+
+class OrderReturn(models.Model):
+    """
+    MVC ROLE: MODEL — post-delivery request to Return, Refund, or Exchange items.
+    DESIGN PATTERN: State Machine (with an Audit-Log flavour via created/resolved_at)
+
+    A customer raises a request against a *delivered* order; an admin/seller
+    resolves it. The legal status transitions are:
+
+        requested ──► approved ──► completed
+            └───────► rejected
+
+    These transitions are owned by OrderService.resolve_return() (the Service
+    Layer) rather than the model, so the controller stays thin and the rule
+    "completing a refund flips the Order to 'refunded'" lives in one place.
+
+    WHY A SEPARATE MODEL (not a status on Order)?
+      An order can have at most one *open* request but a full history of past
+      ones, each with its own kind/reason/resolution. Modelling it as its own
+      row keeps that history immutable and queryable — the same reasoning that
+      gave OrderStatusHistory its own table.
+    """
+    KIND_CHOICES = [
+        ('return',   'Return'),
+        ('refund',   'Refund'),
+        ('exchange', 'Exchange'),
+    ]
+    STATUS_CHOICES = [
+        ('requested', 'Requested'),
+        ('approved',  'Approved'),
+        ('rejected',  'Rejected'),
+        ('completed', 'Completed'),
+    ]
+    REASON_CHOICES = [
+        ('wrong_size',     'Wrong size / does not fit'),
+        ('damaged',        'Arrived damaged or defective'),
+        ('wrong_item',     'Received the wrong item'),
+        ('not_as_described', 'Not as described'),
+        ('changed_mind',   'Changed my mind'),
+        ('other',          'Other'),
+    ]
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='returns')
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='requested', db_index=True)
+    customer_note = models.TextField(blank=True)
+    admin_note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'order_returns'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.get_kind_display()} for {self.order.order_number} ({self.status})"

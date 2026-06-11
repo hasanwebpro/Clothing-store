@@ -53,6 +53,7 @@ urlpatterns = [
     path('api/v1/analytics/',     include('apps.analytics.urls')),
     path('api/v1/newsletter/',    include('apps.newsletter.urls')),
     path('api/v1/wishlist/',      include('apps.users.wishlist_urls')),
+    path('api/v1/support/',       include('apps.support.urls')),
 ]
 
 # Serve media files in development

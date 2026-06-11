@@ -33,6 +33,16 @@ ONE-TO-ONE CART PER USER:
   Cart is a OneToOneField on User. A user can only have one active cart.
   CartService.get_or_create_cart() is the safe entry point — it creates
   the cart record lazily on first add-to-cart.
+
+SAVE FOR LATER (soft partition of one cart):
+  CartItem.saved_for_later splits a single cart into two logical lists —
+  "active" (checkout) and "saved" — instead of introducing a second model.
+  WHY a flag, not a new table? The two lists share every other field and the
+  same stock-reservation trigger; a boolean keeps the schema and the DB
+  triggers untouched. The Cart.item_count / Cart.subtotal properties and
+  CartService (totals, coupon, place_order, clear_cart) all filter
+  saved_for_later=False, so saved items never count toward checkout yet survive
+  across orders. Moving an item back to the cart re-validates stock.
 """
 from django.db import models
 from django.conf import settings
@@ -57,11 +67,15 @@ class Cart(models.Model):
 
     @property
     def item_count(self) -> int:
-        return sum(item.quantity for item in self.items.all())
+        # Saved-for-later items are not part of the active cart total.
+        return sum(item.quantity for item in self.items.all() if not item.saved_for_later)
 
     @property
     def subtotal(self) -> float:
-        return sum(float(item.unit_price) * item.quantity for item in self.items.all())
+        return sum(
+            float(item.unit_price) * item.quantity
+            for item in self.items.all() if not item.saved_for_later
+        )
 
 
 class CartItem(models.Model):
@@ -71,6 +85,7 @@ class CartItem(models.Model):
     )
     quantity = models.PositiveSmallIntegerField(default=1)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)  # price snapshot
+    saved_for_later = models.BooleanField(default=False, db_index=True)
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

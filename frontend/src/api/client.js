@@ -13,7 +13,11 @@
  */
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// Use a relative path so requests go through Vite's proxy (/api → localhost:8000).
+// This makes cookies same-origin (localhost:3000 → localhost:3000/api) so the
+// httpOnly refresh-token cookie is always sent, even after a full browser close.
+// In production, VITE_API_URL can be set to the absolute backend URL.
+const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 // ── In-memory access token store ──────────────────────────────────────────
 // We store the access token in memory (NOT localStorage) to prevent XSS attacks.

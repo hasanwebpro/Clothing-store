@@ -1,34 +1,28 @@
 """
-DESIGN PATTERN: Observer (also called Publish-Subscribe / Event-Driven)
+Pattern   : Observer / Publish-Subscribe  (Behavioural — GoF)
+--------------------------------------------------------------
+What it does : This module is the event infrastructure for the whole project.
+                 EventBus   — the Subject; holds the subscriber registry and
+                              dispatches events to all registered observers.
+                 BaseObserver — abstract interface every observer must implement.
+                 Events      — constants (e.g. Events.ORDER_PLACED) so event
+                              names are not raw strings scattered through the code.
 
-PROBLEM: When an order is placed, many things must happen:
-  - Send confirmation email to customer
-  - Send SMS notification
-  - Decrement inventory
-  - Create an in-app notification for admin
-  - Update analytics counters
+Why we used it: When an order is placed, emails, inventory deduction, and in-app
+               notifications must all fire. Hard-coding those calls in OrderService
+               creates a 300-line "god method" that violates Single Responsibility
+               and breaks every time a new side effect is added.
 
-If we put all this logic inside OrderService, it becomes a 300-line
-"god method" that violates the Single Responsibility Principle and is
-nearly impossible to test or extend.
+Why preferred : OrderService calls EventBus.publish(Events.ORDER_PLACED, {...})
+               and stops. Each observer (email, inventory, in-app) reacts in its
+               own class in its own app. One failing observer does NOT block the
+               others — EventBus catches exceptions and logs them individually.
+               For production scale: replace EventBus with Celery + Redis tasks;
+               no observer code changes, just the transport underneath.
 
-SOLUTION: OrderService publishes ONE event ('order.placed'). Every other
-system that cares about that event registers as an Observer and reacts
-independently. Adding a new reaction (e.g., loyalty points) = add ONE
-new observer class, zero changes to existing code.
-
-CLASSES INVOLVED:
-  - EventBus      → the Subject (holds subscriber registry)
-  - BaseObserver  → abstract interface all observers implement
-  - Concrete observers are in apps/notifications/observers.py
-
-HOW TO REGISTER OBSERVERS:
-  In each app's AppConfig.ready() method:
-    EventBus.subscribe('order.placed', EmailNotificationObserver())
-    EventBus.subscribe('order.placed', InventoryObserver())
-
-SCALABILITY: For high-traffic production, replace EventBus with
-  Celery + Redis so observers run asynchronously as background tasks.
+Works with  : Observer classes in apps/notifications/observers.py and
+               apps/inventory/observers.py. Observers subscribe in each
+               app's AppConfig.ready() method.
 """
 import logging
 from abc import ABC, abstractmethod

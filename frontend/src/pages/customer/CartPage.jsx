@@ -13,11 +13,21 @@ const SHIMMER = {
 
 export default function CartPage() {
   const navigate = useNavigate();
-  const { cart, updateItem, removeItem, applyCoupon, removeCoupon, isLoading } = useCart();
+  const { cart, updateItem, removeItem, saveForLater, moveToCart, applyCoupon, removeCoupon, isLoading } = useCart();
   const [couponInput, setCouponInput] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
 
   const items = cart?.items || [];
+  const savedItems = cart?.saved_items || [];
+
+  const handleSaveForLater = async (itemId) => {
+    try { await saveForLater(itemId); toast.success('Saved for later'); }
+    catch { toast.error('Could not save item'); }
+  };
+  const handleMoveToCart = async (itemId) => {
+    try { await moveToCart(itemId); toast.success('Moved to cart'); }
+    catch (err) { toast.error(err.response?.data?.message || 'Could not move item'); }
+  };
   const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
   const discount = cart?.discount_amount || 0;
   const freeShipping = subtotal - discount >= 2000;
@@ -44,7 +54,7 @@ export default function CartPage() {
     </div>
   );
 
-  if (items.length === 0) return (
+  if (items.length === 0 && savedItems.length === 0) return (
     <div className="max-w-5xl mx-auto px-4 py-24 text-center">
       <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6"
         style={{ background:'linear-gradient(135deg,rgba(192,0,90,0.08),rgba(123,94,167,0.06))' }}>
@@ -133,14 +143,66 @@ export default function CartPage() {
                     </button>
                   </div>
                 </div>
+
+                <button onClick={() => handleSaveForLater(item.id)}
+                  className="mt-2 inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-brand-600 transition-colors font-medium">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+                  Save for later
+                </button>
               </div>
             </div>
           ))}
+
+          {items.length === 0 && (
+            <div className="luxe-card p-6 text-center text-sm text-neutral-500" style={{ boxShadow:'none', border:'1px dashed rgba(26,27,42,0.12)' }}>
+              Your active cart is empty — move a saved item back to checkout.
+            </div>
+          )}
 
           <Link to="/products" className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-700 font-medium transition-colors mt-2">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             Continue Shopping
           </Link>
+
+          {/* ── Saved for later ─────────────────────────────── */}
+          {savedItems.length > 0 && (
+            <div className="pt-4">
+              <h2 className="font-display text-lg font-bold text-neutral-900 mb-3 flex items-center gap-2">
+                <svg className="w-5 h-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+                Saved for Later
+                <span className="text-sm text-neutral-400 font-normal">({savedItems.length})</span>
+              </h2>
+              <div className="space-y-3">
+                {savedItems.map((item) => (
+                  <div key={item.id} className="luxe-card p-4 flex gap-4 items-center"
+                    style={{ boxShadow:'none', border:'1px solid rgba(26,27,42,0.07)' }}>
+                    <div className="w-16 h-20 bg-neutral-50 rounded-xl overflow-hidden flex-shrink-0">
+                      {item.primary_image ? (
+                        <img src={item.primary_image} alt={item.product_name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-neutral-200">
+                          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16" /></svg>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-neutral-900 text-sm truncate">{item.product_name}</p>
+                      <p className="text-sm font-bold text-neutral-900 mt-1 tabular-nums">PKR {Number(item.unit_price).toLocaleString()}</p>
+                    </div>
+                    <div className="flex flex-col gap-2 flex-shrink-0">
+                      <button onClick={() => handleMoveToCart(item.id)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white transition-all"
+                        style={{ background:'linear-gradient(135deg,#EC6EAD,#7b5ea7)' }}>
+                        Move to Cart
+                      </button>
+                      <button onClick={() => removeItem(item.id)}
+                        className="text-xs text-neutral-400 hover:text-red-500 transition-colors">Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Order summary ─────────────────────────────────── */}
@@ -220,10 +282,10 @@ export default function CartPage() {
             </div>
 
             {/* Checkout CTA */}
-            <button onClick={() => navigate('/checkout')}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl py-4 text-sm font-bold text-white tracking-wide transition-all cursor-pointer"
+            <button onClick={() => navigate('/checkout')} disabled={items.length === 0}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl py-4 text-sm font-bold text-white tracking-wide transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               style={{ background:'linear-gradient(135deg,#EC6EAD,#7b5ea7)', boxShadow:'0 4px 20px rgba(236,110,173,0.35)' }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow='0 8px 32px rgba(236,110,173,0.55)'}
+              onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.boxShadow='0 8px 32px rgba(236,110,173,0.55)'; }}
               onMouseLeave={e => e.currentTarget.style.boxShadow='0 4px 20px rgba(236,110,173,0.35)'}>
               Proceed to Checkout
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -234,7 +296,7 @@ export default function CartPage() {
             {/* Payment badges */}
             <div className="flex items-center justify-center gap-3 pt-1">
               <svg className="w-3.5 h-3.5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-              {['COD','JazzCash','Easypaisa'].map(m => (
+              {['COD','Easypaisa'].map(m => (
                 <span key={m} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-neutral-100 text-neutral-500">{m}</span>
               ))}
             </div>

@@ -1,12 +1,17 @@
 """
-DESIGN PATTERN: Repository
+Pattern   : Repository  (Data Access — Fowler, PEAA)
+------------------------------------------------------
+What it does : UserRepository and AddressRepository are the only places that
+               query User and Address models. Views never call
+               User.objects.xxx() directly — they always go through here.
 
-UserRepository abstracts all database queries for User and Address models.
-Views never call User.objects.xxx() directly — they always go through here.
+Why we used it: Spreading ORM calls across views creates tight coupling between
+               the HTTP layer and the database schema. A field rename or an
+               auth-backend swap would require hunting through every view.
 
-SDA Note: This is the Data Access Layer in the MVC architecture.
-The View (Controller) asks "give me this user", the Repository figures
-out HOW to fetch it from the database.
+Why preferred : The Repository is the Data Access Layer in MVC. Swapping the
+               auth backend tomorrow means changing only this file. Views stay
+               clean and focused on HTTP, not database mechanics.
 """
 from django.contrib.auth import get_user_model
 from .models import Address
@@ -54,16 +59,18 @@ class UserRepository:
 
 class AddressRepository:
     def get_user_addresses(self, user_id: int):
-        return Address.objects.filter(user_id=user_id)
+        return Address.objects.filter(user_id=user_id, is_deleted=False)
 
     def get_default(self, user_id: int):
-        return Address.objects.filter(user_id=user_id, is_default=True).first()
+        return Address.objects.filter(user_id=user_id, is_default=True, is_deleted=False).first()
 
     def get_by_id(self, address_id: int, user_id: int):
-        return Address.objects.get(pk=address_id, user_id=user_id)
+        return Address.objects.get(pk=address_id, user_id=user_id, is_deleted=False)
 
     def create(self, user_id: int, data: dict) -> Address:
         return Address.objects.create(user_id=user_id, **data)
 
-    def delete(self, address_id: int, user_id: int) -> None:
-        Address.objects.filter(pk=address_id, user_id=user_id).delete()
+    def soft_delete(self, address_id: int, user_id: int) -> None:
+        Address.objects.filter(pk=address_id, user_id=user_id).update(
+            is_deleted=True, is_default=False
+        )

@@ -6,7 +6,7 @@
  * FAQs address all three, directly reducing cart abandonment.
  *
  * SEO Value: FAQ content creates natural keyword clusters
- * (e.g., "free delivery Pakistan", "JazzCash clothing store") that rank
+ * (e.g., "free delivery Pakistan", "Easypaisa clothing store") that rank
  * for long-tail queries with buying intent.
  *
  * Structured Data: Implement JSON-LD FAQ schema in the head via useSEO
@@ -29,7 +29,7 @@ const FAQS = [
   },
   {
     q: 'What payment methods do you accept?',
-    a: 'We accept Cash on Delivery (COD), JazzCash, and Easypaisa. All digital payments are encrypted and secure. COD is available across Pakistan with no additional fee.',
+    a: 'We accept Cash on Delivery (COD) and Easypaisa. All digital payments are encrypted and secure. COD is available across Pakistan with no additional fee.',
   },
   {
     q: 'What is your return and exchange policy?',

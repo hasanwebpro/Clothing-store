@@ -1,14 +1,21 @@
 """
-Notification Observers — react to system events and create notifications.
+Pattern   : Observer  (Behavioural — GoF)
+------------------------------------------
+What it does : These observers subscribe to order events via EventBus. When
+               'order.placed' or 'order.status_changed' fires, they react:
+                 EmailNotificationObserver  → sends email to the customer
+                 InAppNotificationObserver  → writes a Notification DB record
+               Neither knows about the other, and OrderService knows about neither.
 
-DESIGN PATTERN: Observer
-These classes are registered in UsersConfig.ready() to listen for events
-published by OrderService. When 'order.placed' fires, both observers react:
-  - EmailNotificationObserver → sends email
-  - InAppNotificationObserver → creates Notification DB record
+Why we used it: When an order is placed, email and in-app notifications must fire.
+               Calling both directly from OrderService creates tight coupling —
+               OrderService would grow every time a new channel is added, and
+               a broken email sender could crash the entire order placement.
 
-SDA Note: Adding a new notification channel (SMS, push) = add one class
-and one EventBus.subscribe() call. Zero changes to OrderService.
+Why preferred : Adding a new channel (SMS, push notification, WhatsApp) = one
+               new observer class + one EventBus.subscribe() call in apps.py.
+               OrderService never changes. Each channel is independently testable
+               and isolated — one failing observer does not block the others.
 """
 import logging
 from django.core.mail import send_mail

@@ -1,47 +1,23 @@
 """
-DESIGN PATTERN: Strategy
-MVC ROLE: Domain service — encapsulates interchangeable payment algorithms
-          behind a common interface so the Controller never knows which
-          gateway it is talking to.
+Pattern   : Strategy  (Behavioural — GoF)
+------------------------------------------
+What it does : Defines a family of payment algorithms (COD, Easypaisa, Card),
+               encapsulates each as a class, and makes them interchangeable at
+               runtime. The controller picks the strategy based on the order's
+               payment_method field — it never knows the concrete type.
 
-WHAT IS THE STRATEGY PATTERN?
--------------------------------
-Define a family of algorithms (payment methods), encapsulate each one,
-and make them interchangeable. The Controller selects the algorithm at
-runtime based on the order's payment_method field.
+Why we used it: Without Strategy, the controller would have a growing if/else
+               chain for every payment method. Every time a new gateway is added
+               that chain must be edited — risky, violates Open/Closed Principle.
 
-WITHOUT STRATEGY:
-  if payment_method == 'cod':
-      ...COD logic...
-  elif payment_method == 'easypaisa':
-      ...Easypaisa logic...
-  elif payment_method == 'card':
-      ...card logic...
-  # Adding JazzCash = editing this if/else chain every time
+Why preferred : Adding a new gateway = one new class + one entry in STRATEGIES dict.
+               Zero changes to existing strategies or the controller. This is
+               exactly what Open/Closed Principle demands: open for extension,
+               closed for modification.
 
-WITH STRATEGY:
-  strategy = PaymentStrategyFactory.get_strategy(order.payment_method)
-  result = strategy.process(order, ...)
-  # Adding JazzCash = add JazzCashStrategy class + one entry in STRATEGIES dict
-  # Zero changes to the Controller or any existing strategy.
-
-RELATIONSHIP TO ADAPTER PATTERN:
-  Strategy = the common interface the Controller uses
-  Adapter  = the gateway-specific wrapper (adapters.py)
-  EasypaisaAdapterStrategy wraps EasypaisaAdapter: the Strategy decides
-  WHAT to do, the Adapter decides HOW to talk to the specific gateway.
-
-  CODStrategy has no adapter — COD requires no external API call.
-
-PAYMENTSTRATEGY INTERFACE:
-  Every strategy must implement process() returning:
-    { success, transaction_id, message, redirect_url, form_data }
-  The Controller trusts this contract and never inspects the concrete type.
-
-OPEN/CLOSED PRINCIPLE:
-  PaymentStrategyFactory.STRATEGIES dict is the extension point.
-  Open for extension (add new payment method), closed for modification
-  (no existing code changes when a new gateway is added).
+Works with  : Adapter pattern (adapters.py) — Strategy decides WHAT to do;
+               Adapter decides HOW to talk to the specific third-party gateway.
+               CODStrategy has no adapter because COD needs no external API call.
 """
 from abc import ABC, abstractmethod
 from .adapters import EasypaisaAdapter, CardAdapter

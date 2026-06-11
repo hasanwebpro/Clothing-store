@@ -213,7 +213,7 @@ class DashboardView(APIView):
             .annotate(revenue=Sum('total_amount'), orders=Count('id'))
             .order_by('-revenue')
         )
-        PAYMENT_LABELS = {'cod': 'Cash on Delivery', 'jazzcash': 'JazzCash', 'easypaisa': 'Easypaisa'}
+        PAYMENT_LABELS = {'cod': 'Cash on Delivery', 'easypaisa': 'Easypaisa', 'card': 'Credit / Debit Card'}
         revenue_by_payment = [{
             'method': PAYMENT_LABELS.get(r['payment_method'], r['payment_method']),
             'revenue': float(r['revenue'] or 0),

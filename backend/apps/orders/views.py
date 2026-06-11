@@ -37,10 +37,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.permissions import IsAdmin, IsSeller, IsOwnerOrAdmin
 from core.exceptions import InsufficientStockError
-from .models import Order
+from .models import Order, OrderReturn
 from .serializers import (
     OrderSerializer, OrderListSerializer,
     PlaceOrderSerializer, UpdateOrderStatusSerializer,
+    OrderReturnSerializer, CreateReturnSerializer, ResolveReturnSerializer,
 )
 from .services import OrderService
 
@@ -123,8 +124,11 @@ class UpdateOrderStatusView(APIView):
 
 
 class CancelOrderView(APIView):
-    """POST /api/v1/orders/{id}/cancel/ — customer cancels own pending order"""
+    """POST /api/v1/orders/{id}/cancel/ — customer cancels own order before it ships"""
     permission_classes = [IsAuthenticated]
+
+    # A customer may cancel any time before the order leaves the warehouse.
+    CANCELLABLE_STATUSES = ('pending', 'confirmed', 'processing')
 
     def post(self, request, pk):
         try:
@@ -132,14 +136,82 @@ class CancelOrderView(APIView):
         except Order.DoesNotExist:
             return Response({'message': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if order.status != 'pending':
+        if order.status not in self.CANCELLABLE_STATUSES:
             return Response(
-                {'message': f'Cannot cancel an order with status "{order.status}".'},
+                {'message': f'This order has already been {order.status} and can no longer be cancelled.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        reason = (request.data.get('reason') or '').strip()
+        note = f'Cancelled by customer. Reason: {reason}' if reason else 'Cancelled by customer.'
         order = order_service.update_status(
             order_id=pk, new_status='cancelled',
-            changed_by=request.user, note='Cancelled by customer.'
+            changed_by=request.user, note=note,
         )
         return Response(OrderSerializer(order).data)
+
+
+class ReturnListCreateView(APIView):
+    """
+    MVC ROLE: CONTROLLER — return-request collection endpoint.
+    PATTERNS: Service Layer (delegates to OrderService.create_return) + RBAC
+              (the GET queryset is role-scoped: staff see all, customers see own).
+
+    GET  /api/v1/orders/returns/        → list return requests (own, or all for staff)
+    POST /api/v1/orders/{pk}/returns/   → customer requests a return/refund/exchange
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role in ('admin', 'seller'):
+            returns = OrderReturn.objects.select_related('order').all()
+        else:
+            returns = OrderReturn.objects.select_related('order').filter(order__user=request.user)
+        return Response(OrderReturnSerializer(returns, many=True).data)
+
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk, user=request.user)
+        except Order.DoesNotExist:
+            return Response({'message': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = CreateReturnSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            ret = order_service.create_return(
+                order=order,
+                kind=serializer.validated_data['kind'],
+                reason=serializer.validated_data['reason'],
+                customer_note=serializer.validated_data.get('customer_note', ''),
+            )
+        except ValueError as e:
+            return Response({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(OrderReturnSerializer(ret).data, status=status.HTTP_201_CREATED)
+
+
+class ResolveReturnView(APIView):
+    """
+    MVC ROLE: CONTROLLER — staff resolution endpoint for a return request.
+    PATTERNS: Service Layer (OrderService.resolve_return owns the state
+              transition + the 'completed refund → order refunded' side effect)
+              and RBAC (IsSeller gates this to seller/admin only).
+
+    PATCH /api/v1/orders/returns/{pk}/  → approve / reject / complete
+    """
+    permission_classes = [IsSeller]
+
+    def patch(self, request, pk):
+        try:
+            OrderReturn.objects.get(pk=pk)
+        except OrderReturn.DoesNotExist:
+            return Response({'message': 'Return request not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ResolveReturnSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ret = order_service.resolve_return(
+            return_id=pk,
+            new_status=serializer.validated_data['status'],
+            admin_note=serializer.validated_data.get('admin_note', ''),
+        )
+        return Response(OrderReturnSerializer(ret).data)

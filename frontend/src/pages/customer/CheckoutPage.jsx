@@ -5,6 +5,8 @@ import { authApi } from '../../api/auth.api';
 import { ordersApi } from '../../api/orders.api';
 import { paymentsApi } from '../../api/payments.api';
 import { useCart } from '../../context/CartContext';
+import { PROVINCES, CITIES_BY_PROVINCE, ADDRESS_LABELS } from '../../data/pakistan';
+import { IconHome, IconBuilding, IconMapPin, IconFlag, IconDevicePhone, IconBanknotes, IconClipboard, IconCheckCircle } from '../../components/ui/Icons';
 import toast from 'react-hot-toast';
 
 // ── Card brand SVG logos ──────────────────────────────────────────────────
@@ -126,7 +128,7 @@ const PAYMENT_METHODS = [
     icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>,
   },
   {
-    id: 'card', label: 'Credit / Debit Card', desc: 'Visa, Mastercard — pay securely online',
+    id: 'card', label: 'Credit / Debit Card', desc: 'Visa, Mastercard, Amex — secure online payment',
     icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>,
   },
 ];
@@ -135,12 +137,26 @@ function formatPKR(n) { return `PKR ${Number(n).toLocaleString('en-PK')}`; }
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { cart } = useCart();
+  const { cart, applyCoupon, removeCoupon } = useCart();
   const [step, setStep] = useState(0);
+  const [couponInput, setCouponInput] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setCouponLoading(true);
+    try {
+      await applyCoupon(couponInput.trim().toUpperCase());
+      toast.success('Coupon applied!');
+      setCouponInput('');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invalid coupon code');
+    } finally { setCouponLoading(false); }
+  };
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [placing, setPlacing] = useState(false);
-  const [newAddr, setNewAddr] = useState({ label: 'Home', street: '', city: '', province: '', postal_code: '' });
+  const [newAddr, setNewAddr] = useState({ label: 'Home', street: '', province: '', city: '', postal_code: '' });
   const [showNewAddr, setShowNewAddr] = useState(false);
   const [savingAddr, setSavingAddr] = useState(false);
   const [card, setCard] = useState({ number: '', name: '', expiry: '', cvv: '' });
@@ -177,7 +193,7 @@ export default function CheckoutPage() {
       setNewAddr({ label: 'Home', street: '', city: '', province: '', postal_code: '' });
       await refetchAddresses();
       toast.success('Address saved');
-    } catch { toast.error('Could not save address'); }
+    } catch (err) { toast.error(err?.response?.data?.message || err?.response?.data?.detail || 'Could not save address'); }
     finally { setSavingAddr(false); }
   };
 
@@ -345,22 +361,62 @@ export default function CheckoutPage() {
                   + Add New Address
                 </button>
               ) : (
-                <div className="p-4 rounded-xl space-y-3" style={{ background: 'rgba(26,27,42,0.02)', border: '1px solid rgba(26,27,42,0.08)' }}>
+                <div className="p-4 rounded-xl space-y-4" style={{ background: 'rgba(26,27,42,0.02)', border: '1px solid rgba(26,27,42,0.08)' }}>
                   <h3 className="font-semibold text-sm text-ink-900">New Address</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><label className="label">Label</label>
-                      <input type="text" className="input" placeholder="Home / Office" value={newAddr.label} onChange={(e) => setNewAddr({ ...newAddr, label: e.target.value })} /></div>
-                    <div><label className="label">Postal Code</label>
-                      <input type="text" className="input" value={newAddr.postal_code} onChange={(e) => setNewAddr({ ...newAddr, postal_code: e.target.value })} /></div>
+
+                  {/* Label pills */}
+                  <div className="flex gap-2">
+                    {ADDRESS_LABELS.map(l => (
+                      <label key={l}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 cursor-pointer transition-all text-xs font-medium select-none"
+                        style={newAddr.label === l
+                          ? { borderColor: '#ff006e', background: 'rgba(255,0,110,0.05)', color: '#ff006e' }
+                          : { borderColor: 'rgba(26,27,42,0.12)', color: '#6b7280' }}>
+                        <input type="radio" name="new_addr_label" value={l} checked={newAddr.label === l}
+                          onChange={() => setNewAddr(p => ({ ...p, label: l }))} className="sr-only" />
+                        {l === 'Home' ? <IconHome className="w-3.5 h-3.5" /> : l === 'Office' ? <IconBuilding className="w-3.5 h-3.5" /> : <IconMapPin className="w-3.5 h-3.5" />}
+                        {l}
+                      </label>
+                    ))}
                   </div>
-                  <div><label className="label">Street Address <span className="text-red-400">*</span></label>
-                    <input type="text" className="input" placeholder="House #, Street, Area" value={newAddr.street} onChange={(e) => setNewAddr({ ...newAddr, street: e.target.value })} required /></div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><label className="label">City <span className="text-red-400">*</span></label>
-                      <input type="text" className="input" placeholder="Lahore" value={newAddr.city} onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })} required /></div>
-                    <div><label className="label">Province</label>
-                      <input type="text" className="input" placeholder="Punjab" value={newAddr.province} onChange={(e) => setNewAddr({ ...newAddr, province: e.target.value })} /></div>
+
+                  {/* Street */}
+                  <div>
+                    <label className="label">Street Address <span className="text-red-400">*</span></label>
+                    <input type="text" className="input" placeholder="House #, street, area"
+                      value={newAddr.street} onChange={(e) => setNewAddr(p => ({ ...p, street: e.target.value }))} />
                   </div>
+
+                  {/* Province + City */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">Province <span className="text-red-400">*</span></label>
+                      <select className="input" value={newAddr.province}
+                        onChange={(e) => setNewAddr(p => ({ ...p, province: e.target.value, city: '' }))}>
+                        <option value="">Select…</option>
+                        {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">City <span className="text-red-400">*</span></label>
+                      <select className="input" value={newAddr.city}
+                        onChange={(e) => setNewAddr(p => ({ ...p, city: e.target.value }))}
+                        disabled={!newAddr.province}>
+                        <option value="">{newAddr.province ? 'Select city…' : 'Province first…'}</option>
+                        {(CITIES_BY_PROVINCE[newAddr.province] || []).map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Postal code */}
+                  <div>
+                    <label className="label">Postal Code</label>
+                    <input type="text" inputMode="numeric" maxLength={6} className="input"
+                      placeholder="e.g. 54000"
+                      value={newAddr.postal_code}
+                      onChange={(e) => setNewAddr(p => ({ ...p, postal_code: e.target.value.replace(/\D/g, '') }))} />
+                  </div>
+
                   <div className="flex gap-2 pt-1">
                     <button onClick={handleSaveAddress} disabled={savingAddr} className="btn-primary py-2 text-sm flex-1 justify-center">
                       {savingAddr ? 'Saving…' : 'Save Address'}
@@ -484,14 +540,14 @@ export default function CheckoutPage() {
                     {/* ── Steps ───────────────────────────────────────────── */}
                     <div className="space-y-2.5">
                       {[
-                        { icon: '📱', text: 'Open your Easypaisa app' },
-                        { icon: '💸', text: `Send ${formatPKR(total)} to the number above (Send Money → Mobile Account)` },
-                        { icon: '📋', text: 'Copy the Transaction ID shown on the confirmation screen' },
-                        { icon: '✅', text: 'Paste it below — your order will be confirmed once verified' },
+                        { icon: <IconDevicePhone className="w-4 h-4" />, text: 'Open your Easypaisa app' },
+                        { icon: <IconBanknotes className="w-4 h-4" />, text: `Send ${formatPKR(total)} to the number above (Send Money → Mobile Account)` },
+                        { icon: <IconClipboard className="w-4 h-4" />, text: 'Copy the Transaction ID shown on the confirmation screen' },
+                        { icon: <IconCheckCircle className="w-4 h-4" />, text: 'Paste it below — your order will be confirmed once verified' },
                       ].map((step, i) => (
                         <div key={i} className="flex items-start gap-3 p-3 rounded-xl"
                           style={{ background: i === 1 ? 'rgba(0,163,0,0.04)' : 'transparent', border: i === 1 ? '1px solid rgba(0,163,0,0.1)' : '1px solid transparent' }}>
-                          <span className="text-base flex-shrink-0 mt-0.5">{step.icon}</span>
+                          <span className="text-green-600 flex-shrink-0 mt-0.5">{step.icon}</span>
                           <div className="flex items-start gap-2 flex-1">
                             <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 mt-0.5"
                               style={{ background: '#2e7d32' }}>{i + 1}</span>
@@ -540,39 +596,15 @@ export default function CheckoutPage() {
 
               {/* ── Card form ──────────────────────────────────────────── */}
               {paymentMethod === 'card' && (
-                <div className="rounded-2xl p-5 space-y-4" style={{ background: 'rgba(26,27,42,0.02)', border: '1px solid rgba(26,27,42,0.08)' }}>
+                <div className="space-y-4">
 
-                  {/* Live card preview */}
-                  <div className="relative h-44 rounded-2xl p-5 overflow-hidden select-none"
-                    style={{ background: 'linear-gradient(135deg,#1a1b2a 0%,#2d2060 50%,#1a1b2a 100%)', boxShadow: '0 20px 40px rgba(26,27,42,0.4)' }}>
-                    <div className="absolute inset-0 opacity-10"
-                      style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.3) 0%, transparent 60%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.2) 0%, transparent 50%)' }} />
-                    {/* Chip + card brand logo */}
-                    <div className="flex justify-between items-start">
-                      <div className="w-10 h-7 rounded-md" style={{ background: 'linear-gradient(135deg,#ffd700,#ffa500)', opacity: 0.9 }} />
-                      <div className="h-8 flex items-center">
-                        {cardType
-                          ? <CardLogo type={cardType} className="h-8 drop-shadow-lg" />
-                          : <div className="w-14 h-8 rounded bg-white/10" />
-                        }
-                      </div>
-                    </div>
-                    {/* Card number */}
-                    <p className="text-white font-mono text-lg tracking-[0.2em] mt-5 drop-shadow">
-                      {card.number || '•••• •••• •••• ••••'}
-                    </p>
-                    {/* Name + expiry */}
-                    <div className="flex justify-between items-end mt-4">
-                      <div>
-                        <p className="text-white/50 text-[10px] uppercase tracking-wider">Cardholder</p>
-                        <p className="text-white text-sm font-semibold tracking-wide truncate max-w-[160px]">
-                          {card.name.toUpperCase() || 'FULL NAME'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-white/50 text-[10px] uppercase tracking-wider">Expires</p>
-                        <p className="text-white text-sm font-mono">{card.expiry || 'MM/YY'}</p>
-                      </div>
+                  {/* Accepted cards row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-neutral-400 font-medium">We accept</span>
+                    <div className="flex items-center gap-2">
+                      <VisaLogo className="h-6" />
+                      <MastercardLogo className="h-6" />
+                      <AmexLogo className="h-6" />
                     </div>
                   </div>
 
@@ -588,39 +620,26 @@ export default function CheckoutPage() {
                           setCard(c => ({ ...c, number: formatCardNumber(e.target.value) }));
                           setCardErrors(err => ({ ...err, number: undefined }));
                         }}
-                        className={`input pr-12 font-mono tracking-widest ${cardErrors.number ? 'border-red-400 focus:border-red-400' : ''}`}
+                        className={`input pr-14 font-mono tracking-widest ${cardErrors.number ? 'border-red-400 focus:border-red-400' : ''}`}
                       />
-                      {/* Card brand logo inside input */}
-                      {cardType && (
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <CardLogo type={cardType} className="h-5" />
-                        </span>
-                      )}
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                        {cardType
+                          ? <CardLogo type={cardType} className="h-6" />
+                          : <svg className="w-5 h-5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                            </svg>
+                        }
+                      </span>
                     </div>
-                    {cardErrors.number && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>{cardErrors.number}</p>}
+                    {cardErrors.number && <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1.5"><svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>{cardErrors.number}</p>}
                   </div>
 
-                  {/* Cardholder name */}
-                  <div>
-                    <label className="label">Cardholder Name</label>
-                    <input
-                      type="text" placeholder="Name as it appears on card"
-                      value={card.name}
-                      onChange={e => {
-                        setCard(c => ({ ...c, name: e.target.value }));
-                        setCardErrors(err => ({ ...err, name: undefined }));
-                      }}
-                      className={`input uppercase ${cardErrors.name ? 'border-red-400 focus:border-red-400' : ''}`}
-                    />
-                    {cardErrors.name && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>{cardErrors.name}</p>}
-                  </div>
-
-                  {/* Expiry + CVV */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Expiry + CVV — side by side but separate */}
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="label">Expiry Date</label>
                       <input
-                        type="text" inputMode="numeric" placeholder="MM/YY" maxLength={5}
+                        type="text" inputMode="numeric" placeholder="MM / YY" maxLength={5}
                         value={card.expiry}
                         onChange={e => {
                           setCard(c => ({ ...c, expiry: formatExpiry(e.target.value) }));
@@ -628,7 +647,7 @@ export default function CheckoutPage() {
                         }}
                         className={`input font-mono ${cardErrors.expiry ? 'border-red-400 focus:border-red-400' : ''}`}
                       />
-                      {cardErrors.expiry && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>{cardErrors.expiry}</p>}
+                      {cardErrors.expiry && <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1.5"><svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>{cardErrors.expiry}</p>}
                     </div>
                     <div>
                       <label className="label">CVV</label>
@@ -646,7 +665,7 @@ export default function CheckoutPage() {
                           className={`input pr-10 font-mono ${cardErrors.cvv ? 'border-red-400 focus:border-red-400' : ''}`}
                         />
                         <button type="button" onClick={() => setCvvVisible(v => !v)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 cursor-pointer">
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 cursor-pointer transition-colors">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             {cvvVisible
                               ? <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
@@ -655,16 +674,31 @@ export default function CheckoutPage() {
                           </svg>
                         </button>
                       </div>
-                      {cardErrors.cvv && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>{cardErrors.cvv}</p>}
+                      {cardErrors.cvv && <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1.5"><svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>{cardErrors.cvv}</p>}
                     </div>
                   </div>
 
+                  {/* Cardholder name */}
+                  <div>
+                    <label className="label">Name on Card</label>
+                    <input
+                      type="text" placeholder="As it appears on your card"
+                      value={card.name}
+                      onChange={e => {
+                        setCard(c => ({ ...c, name: e.target.value }));
+                        setCardErrors(err => ({ ...err, name: undefined }));
+                      }}
+                      className={`input ${cardErrors.name ? 'border-red-400 focus:border-red-400' : ''}`}
+                    />
+                    {cardErrors.name && <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1.5"><svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>{cardErrors.name}</p>}
+                  </div>
+
                   {/* Security note */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  <div className="flex items-center gap-2">
+                    <svg className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
-                    <span className="text-xs text-neutral-500">Your card details are encrypted with 256-bit SSL and never stored.</span>
+                    <span className="text-[11px] text-neutral-400">256-bit SSL encrypted · Card details are never stored</span>
                   </div>
                 </div>
               )}
@@ -761,6 +795,38 @@ export default function CheckoutPage() {
           <div className="sticky top-24 luxe-card p-5 space-y-4"
             style={{ boxShadow: 'none', border: '1px solid rgba(26,27,42,0.07)' }}>
             <h3 className="font-display text-lg font-semibold text-ink-900">Order Summary</h3>
+
+            {/* ── Coupon code ── */}
+            {cart?.coupon_code ? (
+              <div className="flex items-center justify-between rounded-xl px-3 py-2.5"
+                style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)' }}>
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5 2a2 2 0 00-2 2v1h-.5A1.5 1.5 0 001 6.5v1A1.5 1.5 0 002.5 9H3v4.5A2.5 2.5 0 005.5 16h9a2.5 2.5 0 002.5-2.5V9h.5A1.5 1.5 0 0019 7.5v-1A1.5 1.5 0 0017.5 5H17V4a2 2 0 00-2-2H5z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-semibold text-emerald-700 font-mono">{cart.coupon_code}</span>
+                </div>
+                <button onClick={removeCoupon} className="text-xs text-neutral-400 hover:text-red-500 transition-colors">Remove</button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="input py-2 text-sm flex-1"
+                  placeholder="Coupon code"
+                  value={couponInput}
+                  onChange={e => setCouponInput(e.target.value.toUpperCase())}
+                  onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
+                />
+                <button
+                  onClick={handleApplyCoupon}
+                  disabled={couponLoading || !couponInput.trim()}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer transition-all whitespace-nowrap disabled:opacity-40"
+                  style={{ background: 'rgba(192,0,90,0.08)', color: '#c0005a', border: '1px solid rgba(192,0,90,0.2)' }}>
+                  {couponLoading ? '…' : 'Apply'}
+                </button>
+              </div>
+            )}
 
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">

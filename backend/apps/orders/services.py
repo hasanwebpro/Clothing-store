@@ -1,38 +1,30 @@
 """
-OrderService — orchestrates the order placement flow.
+Pattern   : Service Layer  (Architectural — Fowler, PEAA)
+          + Observer, Decorator, Atomic Transaction  (all applied here)
+----------------------------------------------------------
+What it does : OrderService is the single entry point for "place an order".
+               It is the most pattern-dense file in the project — four patterns
+               work together inside place_order():
 
-MVC ROLE: SERVICE LAYER
------------------------
-Lives between the Controller (OrderView) and the Models (Order, OrderItem).
-It coordinates side effects so the controller stays one screen of code.
+                 1. Service Layer — coordinates the full checkout flow so
+                    OrderView stays a thin HTTP adapter, not a god method.
 
-THIS IS THE MOST PATTERN-DENSE FILE IN THE PROJECT — IT USES 4 PATTERNS:
+                 2. Decorator (CartPriceCalculator) — pricing and coupon math
+                    is delegated out. OrderService receives the final total;
+                    it never knows HOW the discount was calculated.
 
-  1. SERVICE LAYER
-     OrderService is the single entry point for "place an order".
-     Without it, the view would balloon into a 200-line god method.
+                 3. Observer (EventBus.publish) — inventory deduction, email
+                    confirmation, and in-app notifications all happen outside
+                    this class. ONE publish call triggers N independent observers.
 
-  2. DECORATOR (via CartPriceCalculator)
-     Coupon and discount math is delegated to apps/pricing/decorators.py.
-     Order doesn't know HOW the discount is computed — it just receives
-     the final number. Adding "flash sale" math touches zero lines here.
+                 4. Atomic Transaction (@transaction.atomic) — every DB write
+                    in place_order() is atomic. If any step fails, all previous
+                    writes are rolled back — no half-saved orders.
 
-  3. OBSERVER (via EventBus.publish)
-     Email confirmation, SMS, inventory deduction, low-stock alerts,
-     analytics counters — none of those live here. We publish ONE event
-     ('order.placed') and N observers in other apps react independently.
-     Adding "send to fulfilment API" = add one observer, zero changes here.
-
-  4. TRANSACTION SCRIPT (built into Django via @transaction.atomic)
-     Every write in place_order() is atomic. If step 4 fails, steps 1-3
-     are rolled back — no half-saved orders, no orphaned cart items.
-
-BENEFITS
---------
-• Maintainability — domain logic is centralised
-• Scalability    — swap EventBus for Celery + Redis to run observers async
-• Testability    — mock OrderService directly without HTTP/DB
-• Extensibility  — new observer/decorator = new file, no edits here
+Why preferred : Adding a new post-order side effect (loyalty points, analytics,
+               fulfilment API) = write one new observer class. Zero changes here.
+               Swapping the discount logic = edit CartPriceCalculator only.
+               This file is the stable hub; extensions go in separate spokes.
 """
 import logging
 import random
@@ -41,9 +33,10 @@ from django.db import transaction
 from apps.cart.services import CartService
 from apps.pricing.decorators import CartPriceCalculator
 from apps.inventory.models import Inventory
+from apps.users.models import Address
 from core.events import EventBus, Events
 from core.exceptions import InsufficientStockError
-from .models import Order, OrderItem, OrderStatusHistory
+from .models import Order, OrderItem, OrderStatusHistory, OrderReturn
 
 # ── Delivery simulation data ──────────────────────────────────────────────────
 _DELIVERY_DAYS = [1, 2, 3, 3, 4, 5, 5, 7]   # weighted — most 3-5 days
@@ -77,10 +70,19 @@ class OrderService:
         Complete checkout flow — atomic: either everything succeeds or nothing saves.
         """
         cart = cart_service.get_or_create_cart(user)
-        cart_items = list(cart.items.select_related('variant__product', 'variant__inventory').all())
+        cart_items = list(
+            cart.items.filter(saved_for_later=False)
+            .select_related('variant__product', 'variant__inventory').all()
+        )
 
         if not cart_items:
             raise ValueError("Cannot place an order with an empty cart.")
+
+        # Validate the shipping address belongs to this user and is active
+        if not Address.objects.filter(
+            pk=shipping_address_id, user=user, is_deleted=False
+        ).exists():
+            raise ValueError("Invalid or unavailable shipping address.")
 
         # Step 1: Validate stock for all items (fail fast)
         for item in cart_items:
@@ -199,3 +201,44 @@ class OrderService:
         })
 
         return order
+
+    # ── Returns / Refunds / Exchanges ────────────────────────────────────────
+    # SERVICE LAYER (continued): the post-purchase lifecycle lives here too, so
+    # the controller never embeds domain rules. create_return enforces the
+    # "delivered + no open request" precondition; resolve_return owns the
+    # OrderReturn STATE MACHINE and the side effect of flipping the parent
+    # Order to 'refunded' when a return/refund completes.
+    @transaction.atomic
+    def create_return(self, order, kind: str, reason: str, customer_note: str = '') -> OrderReturn:
+        """Customer requests a return/refund/exchange on a delivered order."""
+        if order.status != 'delivered':
+            raise ValueError("Returns can only be requested for delivered orders.")
+
+        # Prevent stacking multiple open requests on the same order
+        if order.returns.filter(status__in=['requested', 'approved']).exists():
+            raise ValueError("There is already an open request for this order.")
+
+        return OrderReturn.objects.create(
+            order=order, kind=kind, reason=reason, customer_note=customer_note,
+        )
+
+    @transaction.atomic
+    def resolve_return(self, return_id: int, new_status: str, admin_note: str = '') -> OrderReturn:
+        """Admin/seller approves, rejects, or completes a return request."""
+        from django.utils import timezone
+        ret = OrderReturn.objects.select_for_update().select_related('order').get(pk=return_id)
+        ret.status = new_status
+        if admin_note:
+            ret.admin_note = admin_note
+        if new_status in ('approved', 'rejected', 'completed'):
+            ret.resolved_at = timezone.now()
+        ret.save()
+
+        # A completed refund/return flips the order to 'refunded' for clarity
+        if new_status == 'completed' and ret.kind in ('return', 'refund'):
+            if ret.order.status != 'refunded':
+                self.update_status(
+                    ret.order.id, 'refunded', changed_by=ret.order.user,
+                    note=f'{ret.get_kind_display()} completed.',
+                )
+        return ret

@@ -110,6 +110,16 @@ export function CartProvider({ children }) {
     dispatch({ type: 'SET_CART', payload: data });
   };
 
+  const saveForLater = async (itemId) => {
+    const { data } = await cartApi.saveForLater(itemId);
+    dispatch({ type: 'SET_CART', payload: data });
+  };
+
+  const moveToCart = async (itemId) => {
+    const { data } = await cartApi.moveToCart(itemId);
+    dispatch({ type: 'SET_CART', payload: data });
+  };
+
   const applyCoupon = async (code) => {
     const { data } = await cartApi.applyCoupon(code);
     dispatch({ type: 'APPLY_COUPON', payload: { code, totals: data.totals } });
@@ -136,6 +146,8 @@ export function CartProvider({ children }) {
       addItem,
       updateItem,
       removeItem,
+      saveForLater,
+      moveToCart,
       applyCoupon,
       removeCoupon,
     }}>

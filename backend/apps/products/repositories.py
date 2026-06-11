@@ -1,22 +1,34 @@
 """
-DESIGN PATTERN: Repository
+Pattern   : Repository  (Data Access — Fowler, PEAA)
+------------------------------------------------------
+What it does : ProductRepository is the only place that queries the products
+               database. Views and Services call methods like get_featured() or
+               search() — they never write Product.objects.filter() themselves.
 
-ProductRepository is the ONLY place that queries the products database.
-Views and Services never call Product.objects.xxx() directly.
+Why we used it: Without Repository, every view has its own ORM query. A column
+               rename, a query optimisation, or adding a cache must be applied
+               in every view that touches that table — scattered and risky.
 
-PROBLEM SOLVED: If we rename the 'base_price' column tomorrow, we fix
-it in ONE place (here) instead of hunting through every view.
-
-SDA Note: Think of a Repository as a "data librarian". You ask it for
-data by name ("get me featured products") and it handles the SQL details.
+Why preferred : All product queries live in one file. Changing a query (adding
+               select_related for performance, switching to raw SQL, adding Redis
+               cache) touches exactly one place. Views stay thin and readable.
+               Think of it as a "data librarian" — you ask by name, it handles
+               the SQL details.
 """
+from django.core.cache import cache
 from django.db.models import Q
 from .models import Product, Category, ProductVariant, ProductImage, Attribute, AttributeValue
+
+_FEATURED_KEY  = 'products:featured'
+_PUBLISHED_KEY = 'products:published'
+_CACHE_TTL     = 600  # 10 minutes
 
 
 class ProductRepository:
 
     def get_all_published(self):
+        # Returns a queryset (not a list) so DRF's SearchFilter and FilterSet
+        # can apply further filtering/ordering on top of it.
         return (
             Product.objects
             .filter(is_published=True)
@@ -25,12 +37,20 @@ class ProductRepository:
         )
 
     def get_featured(self, limit: int = 8):
-        return (
-            Product.objects
-            .filter(is_published=True, is_featured=True)
-            .select_related('category')
-            .prefetch_related('images')[:limit]
-        )
+        key = f'{_FEATURED_KEY}:{limit}'
+        qs = cache.get(key)
+        if qs is None:
+            qs = list(
+                Product.objects
+                .filter(is_published=True, is_featured=True)
+                .select_related('category')
+                .prefetch_related('images')[:limit]
+            )
+            cache.set(key, qs, _CACHE_TTL)
+        return qs
+
+    def invalidate_product_cache(self):
+        cache.delete(_FEATURED_KEY + ':8')
 
     def get_by_slug(self, slug: str):
         return (

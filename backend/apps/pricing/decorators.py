@@ -1,45 +1,22 @@
 """
-DESIGN PATTERN: Decorator
+Pattern   : Decorator  (Structural — GoF)
+------------------------------------------
+What it does : Each discount type (seasonal sale, coupon, flash sale) is a
+               Decorator that wraps the previous price calculator and adds its
+               own reduction. Decorators stack in any order without modifying
+               each other.
 
-PROBLEM: A product's price can have multiple stacked modifications:
-  - Base price
-  - Seasonal sale (20% off)
-  - Coupon code (-200 PKR)
-  - Flash sale (additional 10% off)
+Why we used it: A cart price can have multiple simultaneous modifications.
+               Combining them with if/else is fragile — adding a new discount
+               type means editing existing pricing logic and retesting everything.
 
-Using if/else to combine these is unmaintainable and violates Open/Closed.
-Adding a "flash sale" means editing existing pricing code.
+Why preferred : Each discount lives in its own class. Adding a FlashSaleDecorator
+               = one new class, zero edits to existing code. Think of it like
+               gift wrapping: each wrapper adds a layer without unwrapping the
+               gift inside. Stacking is unlimited and order-independent.
 
-SOLUTION: Each discount is a Decorator — it wraps the previous calculator
-and adds its own reduction. They can be stacked in any order.
-
-CLASSES INVOLVED:
-  PriceCalculator          → base: returns product's price
-  SeasonalDiscountDecorator → wraps any calculator, applies % off
-  CouponDecorator           → wraps any calculator, applies coupon
-  FlashSaleDecorator        → wraps any calculator, applies flash sale
-
-HOW TO USE:
-  # Simple: just the base price
-  calc = PriceCalculator()
-  price = calc.calculate(product)  # → 1299.00
-
-  # Seasonal sale applied on top
-  calc = SeasonalDiscountDecorator(PriceCalculator(), discount_pct=0.20)
-  price = calc.calculate(product)  # → 1039.20
-
-  # Coupon applied on top of seasonal sale
-  calc = CouponDecorator(
-      SeasonalDiscountDecorator(PriceCalculator(), 0.20),
-      coupon_code='SAVE100'
-  )
-  price = calc.calculate(product)  # → 939.20
-
-SCALABILITY: Adding FlashSaleDecorator = one new class, zero changes elsewhere.
-
-SDA Note: This is the "Decorator" (wrapper) pattern from GoF.
-Think of it like gift wrapping: each wrapper adds a bow, and you can
-stack as many wrappers as you want without changing the gift inside.
+Used by     : CartService and OrderService via CartPriceCalculator, which applies
+               coupon math without either service knowing the discount details.
 """
 from abc import ABC, abstractmethod
 from .models import Coupon

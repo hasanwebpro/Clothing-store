@@ -15,6 +15,9 @@ export const productsApi = {
   getCategories: () => apiClient.get('/products/categories/'),
   getCategoryProducts: (slug, params) => apiClient.get(`/products/categories/${slug}/products/`, { params }),
 
+  // Search autocomplete
+  autocomplete: (q) => apiClient.get('/products/autocomplete/', { params: { q } }),
+
   // Images
   uploadImage: (productId, formData) =>
     apiClient.post(`/products/${productId}/images/`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),

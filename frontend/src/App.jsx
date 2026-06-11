@@ -1,5 +1,15 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useAuth } from './context/AuthContext';
+import LoadingPage from './components/ui/LoadingPage';
 import PublicLayout from './components/layout/PublicLayout';
+
+// Scrolls to top on every route change
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
 import AdminLayout from './components/layout/AdminLayout';
 import SellerLayout from './components/layout/SellerLayout';
 import AccountLayout from './components/layout/AccountLayout';
@@ -27,8 +37,11 @@ import CheckoutPage from './pages/customer/CheckoutPage';
 import OrderSuccessPage from './pages/customer/OrderSuccessPage';
 import OrdersPage from './pages/customer/account/OrdersPage';
 import OrderDetailPage from './pages/customer/account/OrderDetailPage';
+import ReturnsPage from './pages/customer/account/ReturnsPage';
 import WishlistPage from './pages/customer/account/WishlistPage';
+import AddressesPage from './pages/customer/account/AddressesPage';
 import AccountSettingsPage from './pages/customer/account/AccountSettingsPage';
+import ContactPage from './pages/public/ContactPage';
 
 // Seller pages
 import SellerDashboardPage from './pages/seller/SellerDashboardPage';
@@ -44,9 +57,32 @@ import AdminProductsPage from './pages/admin/AdminProductsPage';
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
 import AdminProductFormPage from './pages/admin/AdminProductFormPage';
 
+// Splash runs once ever per browser — never again after first view
+const SPLASH_MIN_MS = 2800;
+const SPLASH_KEY    = 'vogue_splash_seen';
+
 export default function App() {
+  const { isLoading } = useAuth();
+  const mountTime = useRef(Date.now());
+  const alreadySeen = localStorage.getItem(SPLASH_KEY) === '1';
+  const [showSplash, setShowSplash] = useState(!alreadySeen);
+
+  useEffect(() => {
+    if (alreadySeen) return;        // already seen — nothing to do
+    if (isLoading) return;          // auth still in flight — keep waiting
+    const elapsed   = Date.now() - mountTime.current;
+    const remaining = Math.max(0, SPLASH_MIN_MS - elapsed);
+    const t = setTimeout(() => {
+      localStorage.setItem(SPLASH_KEY, '1'); // mark as seen forever
+      setShowSplash(false);
+    }, remaining);
+    return () => clearTimeout(t);
+  }, [isLoading]);
+
   return (
     <BrowserRouter>
+      {showSplash && <LoadingPage />}
+      <ScrollToTop />
       <FluidCursor />
       <Routes>
         {/* ── Auth routes (full-screen, no navbar/footer) ── */}
@@ -65,6 +101,7 @@ export default function App() {
           <Route path="/search" element={<SearchPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/features" element={<FeaturesPage />} />
+          <Route path="/contact" element={<ContactPage />} />
         </Route>
 
         {/* ── Customer routes (requires login) ── */}
@@ -78,7 +115,9 @@ export default function App() {
             <Route index element={<Navigate to="orders" replace />} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="orders/:orderNumber" element={<OrderDetailPage />} />
+            <Route path="returns" element={<ReturnsPage />} />
             <Route path="wishlist" element={<WishlistPage />} />
+            <Route path="addresses" element={<AddressesPage />} />
             <Route path="settings" element={<AccountSettingsPage />} />
           </Route>
         </Route>

@@ -1,24 +1,20 @@
 """
-DESIGN PATTERN: Factory
+Pattern   : Factory Method  (Creational — GoF)
+------------------------------------------------
+What it does : ProductFactory is the single creation point for all product types.
+               It reads 'product_type' and delegates to the correct Builder —
+               SimpleProductBuilder (one default variant) or VariableProductBuilder
+               (multiple size/color SKUs).
 
-PROBLEM: Creating a product involves different logic depending on type.
-A 'simple' product has one variant. A 'variable' product has many variants
-with size/color combinations. Scattering if/else checks in multiple views
-is messy and violates the Open/Closed Principle.
+Why we used it: Product creation logic differs by type. Without Factory, every
+               view that creates a product would need its own if/else block to
+               handle simple vs variable construction — duplication and a
+               violation of Single Responsibility.
 
-SOLUTION: ProductFactory is the single creation point. It reads 'product_type'
-and delegates to the correct Builder class.
-
-CLASSES INVOLVED:
-  ProductFactory        → decides which builder to use
-  SimpleProductBuilder  → creates a product with one default variant
-  VariableProductBuilder → creates a product with multiple SKU variants
-
-SCALABILITY: To add a 'BundleProduct' type, create BundleProductBuilder
-and register it in BUILDERS — zero changes to existing code.
-
-SDA Note: This is the "Factory Method" pattern from GoF (Gang of Four).
-Think of a factory as a "smart constructor" that picks the right recipe.
+Why preferred : Adding a new product type (e.g., 'bundle') = create one new
+               Builder class and add one entry to the BUILDERS dict. No existing
+               view, builder, or service changes. The Factory is the only
+               "smart constructor" in the system — one place, one responsibility.
 """
 from .builders import SimpleProductBuilder, VariableProductBuilder
 

@@ -1,9 +1,22 @@
 """
-InventoryObserver — reacts to order events and adjusts stock levels.
+Pattern   : Observer  (Behavioural — GoF)
+------------------------------------------
+What it does : InventoryObserver subscribes to 'order.placed'. When that event
+               fires, it decrements stock for each ordered variant and writes an
+               immutable InventoryMovement record (Audit Log). If stock falls
+               below the reorder threshold, it publishes a 'inventory.low_stock'
+               event for further observers to handle.
 
-DESIGN PATTERN: Observer
-This observer is registered in UsersConfig.ready() to listen for 'order.placed'.
-When an order is placed, it decrements stock and logs the movement.
+Why we used it: Inventory deduction is a side effect of placing an order, but
+               OrderService should not depend on or know about the inventory layer.
+               Calling inventory logic directly from OrderService would create a
+               cross-app dependency that makes both harder to test and maintain.
+
+Why preferred : The Observer keeps OrderService completely decoupled from inventory.
+               OrderService publishes the event and forgets. If the inventory
+               system is down or throws an error, EventBus catches it and logs it —
+               the order is still saved. This is the correct separation for a
+               multi-app Django project where each app owns its own domain.
 """
 import logging
 from django.db import transaction

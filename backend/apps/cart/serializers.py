@@ -68,13 +68,27 @@ class CartItemSerializer(serializers.ModelSerializer):
 
 
 class CartSerializer(serializers.ModelSerializer):
-    items = CartItemSerializer(many=True, read_only=True)
+    # The single CartItem set is presented to the client as two lists —
+    # `items` (active) and `saved_items` (save-for-later) — mirroring the
+    # soft partition described in models.py. We iterate the already-prefetched
+    # `obj.items.all()` in Python (rather than two queries) to avoid an extra
+    # round-trip on a relation that is small per-user.
+    items = serializers.SerializerMethodField()
+    saved_items = serializers.SerializerMethodField()
     item_count = serializers.IntegerField(read_only=True)
     subtotal = serializers.FloatField(read_only=True)
 
     class Meta:
         model = Cart
-        fields = ['id', 'items', 'item_count', 'subtotal', 'coupon_code']
+        fields = ['id', 'items', 'saved_items', 'item_count', 'subtotal', 'coupon_code']
+
+    def get_items(self, obj):
+        active = [i for i in obj.items.all() if not i.saved_for_later]
+        return CartItemSerializer(active, many=True, context=self.context).data
+
+    def get_saved_items(self, obj):
+        saved = [i for i in obj.items.all() if i.saved_for_later]
+        return CartItemSerializer(saved, many=True, context=self.context).data
 
 
 class AddToCartSerializer(serializers.Serializer):

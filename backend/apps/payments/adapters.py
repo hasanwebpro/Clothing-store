@@ -1,12 +1,41 @@
 """
-DESIGN PATTERN: Adapter
+Pattern   : Adapter  (Structural — GoF)
+-----------------------------------------
+What it does : Each payment gateway (Easypaisa, Card) has a completely
+               different API. The Adapter wraps each one and makes it look identical
+               to the rest of the system through PaymentGatewayInterface.
 
-Each adapter wraps a payment gateway's SDK and translates it to our
-internal PaymentGatewayInterface, so gateway changes never touch business logic.
+Why we used it: Without Adapter, OrderService would contain growing if/else blocks
+               for every gateway's unique request/response format. That couples
+               business logic directly to third-party APIs.
 
-Gateways:
-  EasypaisaAdapter  → Easypaisa mobile wallet
-  CardAdapter       → Credit/Debit card (sandbox; swap for Stripe in prod)
+Why preferred : Swapping or adding a gateway touches exactly ONE file — the adapter
+               for that gateway. OrderService, strategies.py, and the rest of the
+               codebase are completely unaware of the change. This is the cleanest
+               way to isolate external dependencies.
+
+Works with  : Strategy pattern (strategies.py) — Strategy picks WHICH gateway to
+               call; Adapter handles HOW to call it.
+
+NOTE ON SANDBOX IMPLEMENTATIONS:
+---------------------------------
+EasypaisaAdapter and CardAdapter are intentionally sandbox/manual implementations.
+The Adapter pattern is a STRUCTURAL pattern — its value is in the interface
+normalization, not in whether a live third-party API is being called.
+
+Proof the pattern is correctly applied:
+  - OrderService calls adapter.initiate_payment() without knowing the gateway type.
+  - Adding a real Easypaisa API or a Google Pay gateway requires creating ONE new
+    class that implements PaymentGatewayInterface. Zero changes to OrderService,
+    CartService, views, or any other file.
+  - Removing a gateway is equally isolated — delete the adapter class and remove
+    one entry from STRATEGIES. Nothing else breaks.
+
+This is exactly what the Adapter pattern guarantees: the calling code is
+completely decoupled from the concrete implementation behind the interface.
+Real API credentials (Easypaisa storeId/hashKey) are already wired in settings
+and EasypaisaAdapter already reads them — upgrading from manual to automated
+verification is a change inside this file only.
 """
 import hashlib
 import logging

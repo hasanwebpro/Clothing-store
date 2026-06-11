@@ -45,7 +45,7 @@ import PromoBannerSection from '../../components/sections/PromoBannerSection';
 export default function HomePage() {
   useSEO({
     title: null,
-    description: 'Shop premium fashion for women, men & kids in Pakistan. Free delivery on orders over PKR 2,000. JazzCash, Easypaisa & COD accepted.',
+    description: 'Shop premium fashion for women, men & kids in Pakistan. Free delivery on orders over PKR 2,000. Easypaisa & COD accepted.',
   });
 
   return (

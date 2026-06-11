@@ -30,6 +30,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.exceptions import InsufficientStockError, InvalidCouponError
+from .models import CartItem
 from .serializers import (
     CartSerializer, AddToCartSerializer, UpdateCartItemSerializer, ApplyCouponSerializer
 )
@@ -91,6 +92,34 @@ class CartItemView(APIView):
 
     def delete(self, request, item_id):
         cart_service.remove_item(request.user, item_id)
+        cart = cart_service.get_or_create_cart(request.user)
+        return Response(CartSerializer(cart, context={'request': request}).data)
+
+
+class SaveForLaterView(APIView):
+    """POST /api/v1/cart/items/{id}/save/ — move an active line to 'saved for later'"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, item_id):
+        try:
+            cart_service.save_for_later(request.user, item_id)
+        except CartItem.DoesNotExist:
+            return Response({'message': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+        cart = cart_service.get_or_create_cart(request.user)
+        return Response(CartSerializer(cart, context={'request': request}).data)
+
+
+class MoveToCartView(APIView):
+    """POST /api/v1/cart/items/{id}/move-to-cart/ — move a saved item back to the cart"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, item_id):
+        try:
+            cart_service.move_to_cart(request.user, item_id)
+        except CartItem.DoesNotExist:
+            return Response({'message': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+        except InsufficientStockError as e:
+            return Response({'message': e.message}, status=status.HTTP_400_BAD_REQUEST)
         cart = cart_service.get_or_create_cart(request.user)
         return Response(CartSerializer(cart, context={'request': request}).data)
 

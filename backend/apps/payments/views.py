@@ -114,14 +114,14 @@ class InitiatePaymentView(APIView):
 
 class PaymentCallbackView(APIView):
     """
-    POST /api/v1/payments/callback/?gateway=jazzcash
-    Handles IPN (Instant Payment Notification) from JazzCash / Easypaisa.
+    POST /api/v1/payments/callback/?gateway=easypaisa
+    Handles IPN (Instant Payment Notification) from Easypaisa.
     This endpoint must be PUBLIC (AllowAny) as the gateway calls it directly.
     """
     permission_classes = [AllowAny]
 
     def post(self, request):
-        gateway = request.query_params.get('gateway', 'jazzcash')
+        gateway = request.query_params.get('gateway', 'easypaisa')
         callback_data = request.data
 
         # Verify the payment with the gateway's adapter

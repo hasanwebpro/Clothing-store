@@ -231,7 +231,7 @@ export default function CartDrawer({ isOpen, onClose }) {
             {/* Payment icons */}
             <div className="flex items-center justify-center gap-3 pt-1">
               <span className="text-[10px] font-medium text-neutral-300 uppercase tracking-wider">Pay with</span>
-              {['COD', 'JazzCash', 'Easypaisa'].map(m => (
+              {['COD', 'Easypaisa'].map(m => (
                 <span key={m} className="text-[9px] font-bold px-2 py-0.5 rounded"
                   style={{ background: 'rgba(26,27,42,0.05)', color: 'rgba(26,27,42,0.4)' }}>
                   {m}

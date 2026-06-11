@@ -162,7 +162,7 @@ const FEATURES = [
     category: 'Checkout & Payments',
     items: [
       { Icon: Icons.Cash, title: 'Cash on Delivery (COD)', desc: 'Pay when your order arrives. COD is available across Pakistan with no extra fee. The safest payment option for first-time shoppers.', tech: 'CODStrategy — Strategy Pattern in PaymentService' },
-      { Icon: Icons.Phone, title: 'JazzCash & Easypaisa', desc: 'Pay instantly with your mobile wallet. One-tap payment for registered JazzCash/Easypaisa users. No card needed.', tech: 'Adapter Pattern wraps JazzCash SDK into PaymentStrategy interface' },
+      { Icon: Icons.Phone, title: 'Easypaisa', desc: 'Pay instantly with your mobile wallet. One-tap payment for registered Easypaisa users. No card needed.', tech: 'Adapter Pattern wraps Easypaisa SDK into PaymentStrategy interface' },
       { Icon: Icons.Tag, title: 'Coupon Codes', desc: 'Apply discount codes at checkout. Coupons support percentage discounts, fixed amounts, minimum order values, and expiry dates.', tech: 'Decorator Pattern: CouponDecorator wraps PriceCalculator' },
       { Icon: Icons.Box, title: '3-Step Checkout', desc: 'Our streamlined 3-step checkout (Address → Payment → Review) reduces cart abandonment. All saved addresses are pre-loaded.', tech: 'React multi-step form with CartContext state' },
     ],
@@ -194,7 +194,7 @@ const PATTERNS = [
   { key: 'Builder', pattern: 'Builder', where: 'Complex product construction' },
   { key: 'Observer', pattern: 'Observer', where: 'Real-time cart & notifications' },
   { key: 'Strategy', pattern: 'Strategy', where: 'Payment method switching' },
-  { key: 'Adapter', pattern: 'Adapter', where: 'JazzCash & Easypaisa APIs' },
+  { key: 'Adapter', pattern: 'Adapter', where: 'Easypaisa & Card APIs' },
   { key: 'Decorator', pattern: 'Decorator', where: 'Stackable price discounts' },
   { key: 'MVC', pattern: 'MVC / SoC', where: 'Overall system architecture' },
 ];
@@ -221,7 +221,7 @@ function FeatureItem({ item, delay }) {
 export default function FeaturesPage() {
   useSEO({
     title: 'Features',
-    description: "Discover everything VOGUE offers — smart search, COD & JazzCash payments, free returns, live tracking, wishlist, and personalized recommendations. Pakistan's most feature-rich clothing store.",
+    description: "Discover everything VOGUE offers — smart search, COD & Easypaisa payments, free returns, live tracking, wishlist, and personalized recommendations. Pakistan's most feature-rich clothing store.",
   });
 
   const { ref, className } = useRevealClass();
