@@ -50,4 +50,5 @@ desktop.ini
 # ── Misc ──────────────────────────────────────────────────────────────────────
 *.log
 .env.local
+*.zip
 Reports and presentation v1/

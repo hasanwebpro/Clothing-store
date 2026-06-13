@@ -30,7 +30,8 @@ $SQL_FILE = Join-Path $ROOT "clothing_store.sql"
 $MYSQL_PATHS = @(
     "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe",
     "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe",
-    "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe"
+    "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe",
+    "C:\Program Files\MySQL\MySQL Server 9.3\bin\mysql.exe"
 )
 $MYSQL_EXE = $MYSQL_PATHS | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $MYSQL_EXE) { $MYSQL_EXE = "mysql" }
@@ -48,7 +49,7 @@ function Install-WithWinget($id, $name) {
 }
 
 
-# ── 1. PYTHON ─────────────────────────────────────────────────────────────────
+# -- 1. PYTHON ---------------------------------------------------------------
 Write-Header "Checking Python"
 $PY_CMD = $null
 foreach ($cmd in @("python","python3","py")) {
@@ -56,7 +57,7 @@ foreach ($cmd in @("python","python3","py")) {
     if ("$v" -match "3\.\d+") { $PY_CMD = $cmd; break }
 }
 if (-not $PY_CMD) {
-    Write-WARN "Python not found — installing..."
+    Write-WARN "Python not found - installing..."
     Install-WithWinget "Python.Python.3.13" "Python 3.13"
     foreach ($cmd in @("python","python3","py")) {
         $v = & $cmd --version 2>&1
@@ -72,11 +73,11 @@ if (-not $PY_CMD) {
 }
 
 
-# ── 2. NODE.JS ────────────────────────────────────────────────────────────────
+# -- 2. NODE.JS --------------------------------------------------------------
 Write-Header "Checking Node.js"
 $nodeVer = node --version 2>&1
 if (-not ("$nodeVer" -match "v\d+")) {
-    Write-WARN "Node.js not found — installing..."
+    Write-WARN "Node.js not found - installing..."
     Install-WithWinget "OpenJS.NodeJS.LTS" "Node.js LTS"
     $nodeVer = node --version 2>&1
     if (-not ("$nodeVer" -match "v\d+")) {
@@ -89,11 +90,11 @@ if (-not ("$nodeVer" -match "v\d+")) {
 }
 
 
-# ── 3. MYSQL ──────────────────────────────────────────────────────────────────
+# -- 3. MYSQL ----------------------------------------------------------------
 Write-Header "Checking MySQL"
 $mysqlVer = & $MYSQL_EXE --version 2>&1
 if (-not ("$mysqlVer" -match "mysql")) {
-    Write-WARN "MySQL not found — installing..."
+    Write-WARN "MySQL not found - installing..."
     Install-WithWinget "Oracle.MySQL" "MySQL Server 8.0"
     Refresh-Path
     $MYSQL_EXE = $MYSQL_PATHS | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -117,10 +118,10 @@ if ($svc -and $svc.Status -ne "Running") {
 }
 
 
-# ── 4. .ENV FILE ──────────────────────────────────────────────────────────────
+# -- 4. .ENV FILE ------------------------------------------------------------
 Write-Header "Checking .env config"
 if (-not (Test-Path $ENV_FILE)) {
-    Write-WARN ".env missing — first-time setup"
+    Write-WARN ".env missing - first-time setup"
     Write-Host ""
     Write-Host "  Answer a few questions to configure the app." -ForegroundColor White
     Write-Host "  Press Enter to accept the default shown in [brackets]." -ForegroundColor Gray
@@ -143,7 +144,7 @@ if (-not (Test-Path $ENV_FILE)) {
     $inp2    = Read-Host "  Easypaisa merchant phone [03092584328]"
     $epPhone = if ($inp2) { $inp2 } else { "03092584328" }
 
-    # Random secret key — no special chars that break PowerShell
+    # Random secret key
     $chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     $secretKey = -join ((1..60) | ForEach-Object { $chars[(Get-Random -Maximum $chars.Length)] })
 
@@ -165,7 +166,7 @@ if (-not (Test-Path $ENV_FILE)) {
         "DB_PORT=3306",
         "",
         "JWT_ACCESS_TOKEN_LIFETIME_MINUTES=15",
-        "JWT_REFRESH_TOKEN_LIFETIME_DAYS=7",
+        "JWT_REFRESH_TOKEN_LIFETIME_DAYS=3650",
         "",
         "EMAIL_BACKEND=$emailBackend",
         "EMAIL_HOST=smtp.gmail.com",
@@ -188,7 +189,7 @@ if (-not (Test-Path $ENV_FILE)) {
     $lines -join "`r`n" | Set-Content -Path $ENV_FILE -Encoding UTF8
     Write-OK ".env created"
 } else {
-    Write-OK ".env already exists — skipping"
+    Write-OK ".env already exists - skipping"
 }
 
 # Read DB creds from .env
@@ -200,18 +201,26 @@ foreach ($line in Get-Content $ENV_FILE) {
 }
 
 
-# ── 5. PYTHON VENV ────────────────────────────────────────────────────────────
+# -- 5. PYTHON VENV ----------------------------------------------------------
 Write-Header "Python virtual environment"
+if (Test-Path $VENV) {
+    $venvTest = & $PY_EXE --version 2>&1
+    if (-not ("$venvTest" -match "Python 3")) {
+        Write-WARN "Existing venv is broken (wrong Python or different PC) - recreating..."
+        Remove-Item -Recurse -Force $VENV
+        Remove-Item -Force (Join-Path $VENV ".deps_hash") -ErrorAction SilentlyContinue
+    }
+}
 if (-not (Test-Path $VENV)) {
     Write-INFO "Creating venv (first time ~30s)..."
     & $PY_CMD -m venv $VENV
     Write-OK "venv created"
 } else {
-    Write-OK "Already exists — skipping"
+    Write-OK "Already exists - skipping"
 }
 
 
-# ── 6. PYTHON PACKAGES ────────────────────────────────────────────────────────
+# -- 6. PYTHON PACKAGES ------------------------------------------------------
 Write-Header "Python packages"
 $reqFile = Join-Path $BACKEND "requirements.txt"
 $marker  = Join-Path $VENV ".deps_hash"
@@ -223,11 +232,11 @@ if ($reqHash -ne $stored) {
     Set-Content $marker $reqHash -Encoding UTF8
     Write-OK "Installed"
 } else {
-    Write-OK "Already up to date — skipping"
+    Write-OK "Already up to date - skipping"
 }
 
 
-# ── 7. NODE PACKAGES ──────────────────────────────────────────────────────────
+# -- 7. NODE PACKAGES --------------------------------------------------------
 Write-Header "Node.js packages"
 $nodeModules = Join-Path $FRONTEND "node_modules"
 $pkgJson     = Join-Path $FRONTEND "package.json"
@@ -242,11 +251,11 @@ if (-not (Test-Path $nodeModules) -or $pkgHash -ne $storedPkg) {
     Set-Content $nodeMarker $pkgHash -Encoding UTF8
     Write-OK "Installed"
 } else {
-    Write-OK "Already up to date — skipping"
+    Write-OK "Already up to date - skipping"
 }
 
 
-# ── 8. DATABASE ───────────────────────────────────────────────────────────────
+# -- 8. DATABASE -------------------------------------------------------------
 Write-Header "Database"
 $pwFlag = if ($dbPass) { "-p$dbPass" } else { "" }
 
@@ -287,7 +296,7 @@ if ($tableCount -lt 5) {
 }
 
 
-# ── 9. MIGRATIONS ─────────────────────────────────────────────────────────────
+# -- 9. MIGRATIONS -----------------------------------------------------------
 Write-Header "Applying migrations"
 Push-Location $BACKEND
 & $PY_EXE manage.py migrate --run-syncdb 2>&1 |
@@ -297,12 +306,12 @@ Pop-Location
 Write-OK "Migrations up to date"
 
 
-# ── 10. CACHE DIR ─────────────────────────────────────────────────────────────
+# -- 10. CACHE DIR -----------------------------------------------------------
 $cacheDir = Join-Path $BACKEND ".cache"
 if (-not (Test-Path $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir | Out-Null }
 
 
-# ── LAUNCH ────────────────────────────────────────────────────────────────────
+# -- LAUNCH ------------------------------------------------------------------
 Write-Host ""
 Write-Host "  =============================================================" -ForegroundColor Green
 Write-Host "   All done! Starting servers..." -ForegroundColor Green

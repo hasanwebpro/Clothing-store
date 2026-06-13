@@ -51,7 +51,7 @@ const STAT_CONFIG = [
     ),
   },
   {
-    key: 'total_skus',
+    key: 'published_products',
     label: 'Products Listed',
     color: 'text-emerald-600',
     icon: (

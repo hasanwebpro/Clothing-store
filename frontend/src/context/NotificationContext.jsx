@@ -10,8 +10,16 @@ export function NotificationProvider({ children }) {
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
+  // Fetch on login, then poll so the bell stays in sync as the order lifecycle
+  // simulation advances server-side (each due stage writes a new notification).
   useEffect(() => {
-    if (isAuthenticated) fetchNotifications();
+    if (!isAuthenticated) {
+      setNotifications([]);
+      return;
+    }
+    fetchNotifications();
+    const id = setInterval(fetchNotifications, 20000);
+    return () => clearInterval(id);
   }, [isAuthenticated]);
 
   const fetchNotifications = async () => {

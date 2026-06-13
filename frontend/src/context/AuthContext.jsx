@@ -20,7 +20,7 @@
  *
  * The user never sees a logout on refresh as long as their 7-day cookie is valid.
  */
-import { createContext, useContext, useReducer, useEffect } from 'react';
+import { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import { authApi } from '../api/auth.api';
 import { setAccessToken, clearAccessToken } from '../api/client';
 
@@ -49,8 +49,15 @@ function authReducer(state, action) {
 
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
+  // Guard so the session restore fires exactly once. React StrictMode invokes
+  // effects twice in development; without this, two /auth/refresh/ calls race
+  // and can clobber each other's state.
+  const didRestore = useRef(false);
 
   useEffect(() => {
+    if (didRestore.current) return;
+    didRestore.current = true;
+
     const restore = async () => {
       // Optimistically show the cached user profile while the refresh is in-flight.
       // This prevents a flash of logged-out UI on page reload.

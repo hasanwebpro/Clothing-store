@@ -8,6 +8,128 @@ import {
   IconXCircle, IconBanknotes, IconClipboard, IconArrowReturn, IconArrowPath, IconSparkles,
 } from '../../../components/ui/Icons';
 
+const CANCEL_REASONS = [
+  { value: 'changed_mind',       label: 'Changed my mind' },
+  { value: 'wrong_item',         label: 'Ordered the wrong item' },
+  { value: 'better_price',       label: 'Found a better price elsewhere' },
+  { value: 'shipping_too_slow',  label: 'Shipping takes too long' },
+  { value: 'duplicate_order',    label: 'Duplicate / accidental order' },
+  { value: 'other',              label: 'Other' },
+];
+
+// ── Cancel order modal ────────────────────────────────────────────────────────
+function CancelModal({ orderNumber, onClose, onConfirm, isLoading }) {
+  const [reason, setReason] = useState('changed_mind');
+  const [note, setNote] = useState('');
+
+  function handleSubmit() {
+    const text = note.trim() ? `${reason}: ${note.trim()}` : reason;
+    onConfirm(text);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50">
+              <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-neutral-900 text-sm">Cancel Order</h3>
+              <p className="text-xs text-neutral-400 font-mono">{orderNumber}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-400 hover:bg-neutral-100"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Warning */}
+          <div className="rounded-xl px-4 py-3 text-sm flex items-start gap-2.5"
+            style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)' }}>
+            <svg className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            <span className="text-red-700">This action cannot be undone. Your order will be cancelled immediately.</span>
+          </div>
+
+          {/* Reason */}
+          <div>
+            <label className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
+              Why are you cancelling?
+            </label>
+            <div className="mt-2 space-y-1.5">
+              {CANCEL_REASONS.map(r => (
+                <label key={r.value}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all ${
+                    reason === r.value
+                      ? 'border-red-300 bg-red-50'
+                      : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50'
+                  }`}>
+                  <input
+                    type="radio"
+                    name="cancel_reason"
+                    value={r.value}
+                    checked={reason === r.value}
+                    onChange={() => setReason(r.value)}
+                    className="accent-red-500 flex-shrink-0"
+                  />
+                  <span className={`text-sm ${reason === r.value ? 'text-red-700 font-medium' : 'text-neutral-700'}`}>
+                    {r.label}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Optional note */}
+          <div>
+            <label className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
+              Additional details <span className="normal-case font-normal">(optional)</span>
+            </label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              rows={2}
+              placeholder="Tell us more…"
+              className="input mt-2 w-full resize-none"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <button onClick={onClose} className="flex-1 btn-secondary py-2.5">
+              Keep Order
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isLoading}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)' }}
+            >
+              {isLoading ? 'Cancelling…' : 'Cancel Order'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const RETURN_KINDS = [
   { value: 'return',   label: 'Return Item',   desc: 'Send it back',    icon: <IconArrowReturn className="w-5 h-5 text-brand-500" /> },
   { value: 'refund',   label: 'Refund',        desc: 'Get money back',  icon: <IconBanknotes className="w-5 h-5 text-emerald-500" /> },
@@ -257,6 +379,7 @@ export default function OrderDetailPage() {
   const { orderNumber } = useParams();
   const queryClient = useQueryClient();
   const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['order', orderNumber],
@@ -274,14 +397,10 @@ export default function OrderDetailPage() {
     onError: (err) => toast.error(err.response?.data?.message || 'Could not cancel order'),
   });
 
-  function handleCancel() {
-    const reason = window.prompt(
-      'Cancel this order?\n\nOptionally tell us why (helps us improve):',
-      '',
-    );
-    // prompt returns null on "Cancel" in the dialog → abort; empty string is allowed
-    if (reason === null) return;
-    cancelMutation.mutate(reason);
+  function handleCancelConfirm(reason) {
+    cancelMutation.mutate(reason, {
+      onSuccess: () => setCancelModalOpen(false),
+    });
   }
 
   if (isLoading) return (
@@ -323,6 +442,15 @@ export default function OrderDetailPage() {
         />
       )}
 
+      {cancelModalOpen && (
+        <CancelModal
+          orderNumber={order.order_number}
+          onClose={() => setCancelModalOpen(false)}
+          onConfirm={handleCancelConfirm}
+          isLoading={cancelMutation.isLoading}
+        />
+      )}
+
       {/* ── Header ── */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -339,7 +467,7 @@ export default function OrderDetailPage() {
           </span>
           {isCancellable && (
             <button
-              onClick={handleCancel}
+              onClick={() => setCancelModalOpen(true)}
               className="px-3 py-1.5 rounded-full text-xs font-semibold border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-50"
               disabled={cancelMutation.isLoading}
             >

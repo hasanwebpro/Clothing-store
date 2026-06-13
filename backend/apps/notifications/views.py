@@ -36,6 +36,12 @@ class NotificationListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # Catch up the user's in-flight orders first, so any lifecycle stage that
+        # became due since the last poll has already written its notification.
+        # This keeps the bell synchronized with the orders even when the user is
+        # not on an order page. Import is local to avoid a startup import cycle.
+        from apps.orders.services import OrderService
+        OrderService().sync_user_orders(self.request.user)
         return Notification.objects.filter(user=self.request.user)
 
 

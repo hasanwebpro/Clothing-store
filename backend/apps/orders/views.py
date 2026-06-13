@@ -56,6 +56,9 @@ class OrderListView(APIView):
         if request.user.role in ('admin', 'seller'):
             orders = Order.objects.all().order_by('-created_at')
         else:
+            # Catch each of the customer's orders up to its true lifecycle stage
+            # before listing, so the status badges always reflect reality.
+            order_service.sync_user_orders(request.user)
             orders = Order.objects.filter(user=request.user).order_by('-created_at')
 
         serializer = OrderListSerializer(orders, many=True)
@@ -100,6 +103,11 @@ class OrderDetailView(APIView):
                 order = Order.objects.get(order_number=order_number, user=request.user)
         except Order.DoesNotExist:
             return Response({'message': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Advance the order through any lifecycle stages now due before returning
+        # it. The tracking page polls this endpoint, so the timeline, status,
+        # rider and notifications all progress in lock-step on each refresh.
+        order = order_service.sync_lifecycle(order)
 
         return Response(OrderSerializer(order).data)
 

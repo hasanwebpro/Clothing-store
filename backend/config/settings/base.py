@@ -160,19 +160,31 @@ REST_FRAMEWORK = {
 
 # ─────────────────────────────────────────────────────────────
 # JWT Configuration
-# SDA Note: Access tokens expire quickly (15 min) for security.
-# Refresh tokens last longer (7 days) and are stored server-side
-# so we can revoke them on logout (token blacklist).
+# SDA Note: Access tokens expire quickly (15 min) for security and are
+# refreshed silently in the background. The refresh token lives in an
+# httpOnly cookie and is what keeps the user logged in.
+#
+# SESSION PERSISTENCE — "stay logged in until I sign out":
+#   • REFRESH_TOKEN_LIFETIME is effectively unlimited (10 years) so the
+#     session never times out on its own. Only an explicit logout (which
+#     blacklists the token) ends it.
+#   • ROTATE_REFRESH_TOKENS is OFF. With rotation + blacklist ON, two
+#     refresh calls firing close together (e.g. React StrictMode mounting
+#     twice, or the site open in two tabs) would race: the first rotates
+#     and blacklists the cookie's token, and the second — still carrying
+#     that token — gets a 401 and the cookie is cleared, logging the user
+#     out on reload. A single stable refresh token avoids that race
+#     entirely while logout still works via the blacklist below.
 # ─────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(
         minutes=config('JWT_ACCESS_TOKEN_LIFETIME_MINUTES', default=15, cast=int)
     ),
     'REFRESH_TOKEN_LIFETIME': timedelta(
-        days=config('JWT_REFRESH_TOKEN_LIFETIME_DAYS', default=7, cast=int)
+        days=config('JWT_REFRESH_TOKEN_LIFETIME_DAYS', default=3650, cast=int)
     ),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
     'UPDATE_LAST_LOGIN': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,

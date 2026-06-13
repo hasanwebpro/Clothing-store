@@ -36,7 +36,7 @@ from rest_framework.views import APIView
 
 from core.permissions import IsAdmin, IsSeller
 from apps.orders.models import Order, OrderItem
-from apps.products.models import Product, ProductVariant
+from apps.products.models import Product
 from apps.inventory.models import Inventory
 
 User = get_user_model()
@@ -54,10 +54,11 @@ class StoreStatsView(APIView):
     GET /api/v1/analytics/store-stats/  [Public]
 
     Returns live counts for the homepage stats section:
-      - happy_customers  : distinct users who have placed at least one order
-      - brands           : distinct brand names across published products
-      - total_skus       : active product variants (SKUs) across all published products
-      - delivery_rate    : percentage of closed orders that were delivered (not cancelled)
+      - happy_customers     : distinct users who have placed at least one order
+      - brands              : distinct brand names across published products
+      - published_products  : count of published products (matches the admin
+                              dashboard's product count — NOT the SKU/variant count)
+      - delivery_rate       : percentage of closed orders that were delivered (not cancelled)
 
     Cached for 10 minutes so every page load doesn't hammer the DB.
     """
@@ -83,13 +84,10 @@ class StoreStatsView(APIView):
             .values('brand').distinct().count()
         )
 
-        # Total active SKUs across published products
-        total_skus = (
-            ProductVariant.objects.filter(
-                is_active=True,
-                product__is_published=True,
-            ).count()
-        )
+        # Published products — the real product count shown on the storefront,
+        # kept consistent with the admin dashboard. (Counting variants/SKUs here
+        # inflated this to 400+ because each product has many size/colour SKUs.)
+        published_products = Product.objects.filter(is_published=True).count()
 
         # Delivery success rate: delivered / (delivered + cancelled) × 100
         delivered = Order.objects.filter(status='delivered').count()
@@ -98,10 +96,10 @@ class StoreStatsView(APIView):
         delivery_rate = round((delivered / closed * 100), 1) if closed > 0 else 100.0
 
         data = {
-            'happy_customers': happy_customers,
-            'brands':          brands,
-            'total_skus':      total_skus,
-            'delivery_rate':   delivery_rate,
+            'happy_customers':    happy_customers,
+            'brands':             brands,
+            'published_products': published_products,
+            'delivery_rate':      delivery_rate,
         }
         cache.set(self.CACHE_KEY, data, self.CACHE_TTL)
         return Response(data)

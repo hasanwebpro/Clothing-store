@@ -34,9 +34,11 @@ class Notification(models.Model):
     TYPE_CHOICES = [
         ('order_placed', 'Order Placed'),
         ('order_confirmed', 'Order Confirmed'),
+        ('order_processing', 'Order Processing'),
         ('order_shipped', 'Order Shipped'),
         ('order_delivered', 'Order Delivered'),
         ('order_cancelled', 'Order Cancelled'),
+        ('order_refunded', 'Order Refunded'),
         ('payment_confirmed', 'Payment Confirmed'),
         ('low_stock', 'Low Stock Alert'),
         ('review_approved', 'Review Approved'),

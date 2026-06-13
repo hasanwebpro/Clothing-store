@@ -83,7 +83,10 @@ class RegisterView(APIView):
 
 
 REFRESH_COOKIE = 'refresh_token'
-COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days — matches SIMPLE_JWT REFRESH_TOKEN_LIFETIME
+# Derive the cookie lifetime straight from the JWT setting so the browser cookie
+# and the token itself always expire together — no drift, and the cookie is a
+# persistent (not session) cookie so it survives a full browser close/reopen.
+COOKIE_MAX_AGE = int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds())
 
 
 def _set_refresh_cookie(response, refresh_token: str) -> None:

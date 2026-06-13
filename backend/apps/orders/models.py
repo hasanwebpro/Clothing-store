@@ -88,6 +88,10 @@ class Order(models.Model):
     estimated_delivery = models.DateField(null=True, blank=True)
     rider_name = models.CharField(max_length=100, blank=True)
     tracking_note = models.CharField(max_length=255, blank=True)
+    # Marks an order that was genuinely placed through checkout (vs seeded demo
+    # data). Only simulated orders are advanced by the lifecycle simulation, so
+    # historical seed orders keep their fixed status and are never rewritten.
+    is_simulated = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 

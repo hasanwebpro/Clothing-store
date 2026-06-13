@@ -31,6 +31,30 @@ class HomepageReviewSerializer(serializers.ModelSerializer):
         return obj.order_id is not None
 
 
+class AdminReviewSerializer(serializers.ModelSerializer):
+    """
+    Full review DTO for the admin moderation page. Exposes the reviewer's real
+    name + email and the product so the admin can confirm every review comes
+    from an actual account and a genuine (verified) purchase.
+    """
+    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_id = serializers.IntegerField(source='product.id', read_only=True)
+    product_slug = serializers.SlugField(source='product.slug', read_only=True)
+    verified_purchase = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Review
+        fields = [
+            'id', 'user_name', 'user_email', 'product_id', 'product_name', 'product_slug',
+            'rating', 'title', 'body', 'is_approved', 'verified_purchase', 'created_at',
+        ]
+
+    def get_verified_purchase(self, obj):
+        return obj.order_id is not None
+
+
 class ReviewSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     verified_purchase = serializers.SerializerMethodField()

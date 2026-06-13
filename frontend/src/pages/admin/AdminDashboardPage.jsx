@@ -453,7 +453,8 @@ export default function AdminDashboardPage() {
         </Card>
 
         {/* Recent reviews */}
-        <Card title="Recent Reviews" sub="Latest customer feedback">
+        <Card title="Recent Reviews" sub="Latest customer feedback"
+          action={<Link to="/admin/reviews" className="text-xs font-medium hover:text-white transition-colors" style={{ color: C.blue }}>View all →</Link>}>
           {isLoading ? (
             <div className="p-4 space-y-3">{[...Array(4)].map((_, i) => <Skel key={i} h="h-14" />)}</div>
           ) : !s?.recent_reviews?.length ? (
@@ -502,6 +503,7 @@ export default function AdminDashboardPage() {
             { label: 'Manage Orders',  to: '/admin/orders',       color: C.amber },
             { label: 'All Products',   to: '/admin/products',     color: C.emerald },
             { label: 'Customers',      to: '/admin/users',        color: C.violet },
+            { label: 'Reviews',        to: '/admin/reviews',      color: C.cyan },
             { label: 'Coupons',        to: '/admin/coupons',      color: C.orange },
             { label: 'View Store',     to: '/',                   color: C.rose },
           ].map(({ label, to, color }) => (

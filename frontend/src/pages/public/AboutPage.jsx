@@ -58,8 +58,8 @@ const VALUES = [
 ];
 
 const MILESTONES = [
-  { year: '2022', event: 'VOGUE founded in Lahore with 50 products' },
-  { year: '2023', event: 'Reached 1,000 happy customers. Expanded to Karachi & Islamabad.' },
+  { year: '2022', event: 'VOGUE founded in Karachi with 50 products' },
+  { year: '2023', event: 'Reached 1,000 happy customers. Expanded to Lahore & Islamabad.' },
   { year: '2024', event: 'Launched Easypaisa payments. 10,000+ customers.' },
   { year: '2025', event: 'New platform launch with Seller Portal and 15,000+ products.' },
 ];

@@ -23,6 +23,7 @@ import { productsApi } from '../../api/products.api';
 import {
   IconShoppingCart, IconCheckCircle, IconTruck, IconHome,
   IconXCircle, IconCreditCard, IconExclamationTriangle, IconStar, IconBell,
+  IconCube, IconBanknotes,
 } from '../ui/Icons';
 
 const NAV_LINKS = [
@@ -38,9 +39,11 @@ const NAV_LINKS = [
 const NOTIF_ICON = {
   order_placed:      <IconShoppingCart className="w-4 h-4 text-brand-500" />,
   order_confirmed:   <IconCheckCircle className="w-4 h-4 text-emerald-500" />,
+  order_processing:  <IconCube className="w-4 h-4 text-violet-500" />,
   order_shipped:     <IconTruck className="w-4 h-4 text-blue-500" />,
   order_delivered:   <IconHome className="w-4 h-4 text-violet-500" />,
   order_cancelled:   <IconXCircle className="w-4 h-4 text-red-500" />,
+  order_refunded:    <IconBanknotes className="w-4 h-4 text-neutral-500" />,
   payment_confirmed: <IconCreditCard className="w-4 h-4 text-teal-500" />,
   low_stock:         <IconExclamationTriangle className="w-4 h-4 text-amber-500" />,
   review_approved:   <IconStar className="w-4 h-4 text-yellow-400" filled />,

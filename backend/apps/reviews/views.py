@@ -34,7 +34,41 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from core.permissions import IsAdmin
 from .models import Review
-from .serializers import ReviewSerializer, HomepageReviewSerializer
+from .serializers import ReviewSerializer, HomepageReviewSerializer, AdminReviewSerializer
+
+
+class AdminReviewListView(generics.ListAPIView):
+    """
+    GET /api/v1/reviews/all/  [Admin]
+
+    Every review in the store for the admin moderation page — with reviewer
+    name + email and product, so the admin can verify each comes from a real
+    account. Optional filters:
+      ?status=approved | pending
+      ?search=<reviewer name / email / product>
+    """
+    serializer_class = AdminReviewSerializer
+    permission_classes = [IsAdmin]
+
+    def get_queryset(self):
+        qs = Review.objects.select_related('user', 'product').order_by('-created_at')
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter == 'approved':
+            qs = qs.filter(is_approved=True)
+        elif status_filter == 'pending':
+            qs = qs.filter(is_approved=False)
+
+        search = (self.request.query_params.get('search') or '').strip()
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(user__first_name__icontains=search) |
+                Q(user__last_name__icontains=search) |
+                Q(user__email__icontains=search) |
+                Q(product__name__icontains=search)
+            )
+        return qs
 
 
 class HomepageReviewsView(generics.ListAPIView):

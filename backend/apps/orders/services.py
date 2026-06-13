@@ -28,8 +28,9 @@ Why preferred : Adding a new post-order side effect (loyalty points, analytics,
 """
 import logging
 import random
-from datetime import timedelta, date
+from datetime import timedelta
 from django.db import transaction
+from django.utils import timezone
 from apps.cart.services import CartService
 from apps.pricing.decorators import CartPriceCalculator
 from apps.inventory.models import Inventory
@@ -38,8 +39,34 @@ from core.events import EventBus, Events
 from core.exceptions import InsufficientStockError
 from .models import Order, OrderItem, OrderStatusHistory, OrderReturn
 
-# ── Delivery simulation data ──────────────────────────────────────────────────
-_DELIVERY_DAYS = [1, 2, 3, 3, 4, 5, 5, 7]   # weighted — most 3-5 days
+# ── Order lifecycle simulation ────────────────────────────────────────────────
+# The pipeline an order walks through, in order. Used to compare two statuses so
+# the simulation only ever moves an order FORWARD, never backward.
+_PIPELINE = ['pending', 'confirmed', 'processing', 'shipped', 'delivered']
+
+# Cumulative delay from order placement to each stage.
+#
+# These are COMPRESSED to minutes so the full lifecycle is observable during a
+# demo / viva rather than spread over real days. The *proportions* are realistic:
+# a quick confirmation, a packing gap, dispatch, then transit to delivery. In
+# production these constants would simply be larger (hours/days) — nothing else
+# about the simulation would change.
+_LIFECYCLE_SCHEDULE = [
+    ('confirmed',  timedelta(minutes=1)),
+    ('processing', timedelta(minutes=2)),
+    ('shipped',    timedelta(minutes=4)),
+    ('delivered',  timedelta(minutes=6)),
+]
+
+# When an order is read for the first time after a long gap, several stages may
+# already be overdue. We still record their history + in-app notifications (so
+# the timeline is complete), but we only SEND EMAIL for transitions that became
+# due within this recent window — preventing a burst of stale emails at once.
+_EMAIL_FRESHNESS = timedelta(minutes=15)
+
+# Which transitions are worth an email. Mirrors real stores (you get emailed on
+# confirm / ship / deliver / cancel / refund, not on every internal step).
+_EMAIL_STAGES = {'confirmed', 'shipped', 'delivered', 'cancelled', 'refunded'}
 
 _RIDERS = [
     'Ali Hassan', 'Muhammad Bilal', 'Usman Khan', 'Tariq Mehmood',
@@ -101,8 +128,11 @@ class OrderService:
         ]
         totals = price_calc.calculate_cart(items_data, cart.coupon_code)
 
-        # Step 3: Create Order (with simulated delivery window)
-        estimated_delivery = date.today() + timedelta(days=random.choice(_DELIVERY_DAYS))
+        # Step 3: Create Order.
+        # ETA is derived from the lifecycle schedule's final (delivered) stage so
+        # the promised delivery date can never contradict the simulation — the
+        # order is delivered exactly when the ETA says it will be.
+        estimated_delivery = (timezone.now() + _LIFECYCLE_SCHEDULE[-1][1]).date()
         order = Order.objects.create(
             user=user,
             order_number=Order.generate_order_number(),
@@ -116,6 +146,7 @@ class OrderService:
             payment_status='pending',
             notes=notes,
             estimated_delivery=estimated_delivery,
+            is_simulated=True,  # real checkout order → eligible for lifecycle simulation
         )
 
         # Step 4: Create OrderItems (snapshot product name + SKU)
@@ -158,6 +189,9 @@ class OrderService:
             'user_name': user.get_full_name(),
             'total_amount': float(order.total_amount),
             'payment_method': payment_method,
+            # The order is PENDING at placement, not confirmed. The notification
+            # observers read this so they never claim "Confirmed" before it is.
+            'status': 'pending',
             'items': [
                 {'variant_id': i.variant_id, 'quantity': i.quantity, 'sku': i.sku}
                 for i in order.items.all()
@@ -169,9 +203,24 @@ class OrderService:
 
     @transaction.atomic
     def update_status(self, order_id: int, new_status: str, changed_by,
-                      note: str = '', rider_name: str = '', tracking_note: str = '') -> Order:
+                      note: str = '', rider_name: str = '', tracking_note: str = '',
+                      when=None, notify_email: bool = True) -> Order:
+        """
+        Single, atomic status transition. Whether driven by an admin (manual) or
+        the lifecycle simulation (automatic), EVERY transition flows through here
+        so the status change, the audit-log row, and the customer notification are
+        always produced together — a notification can never disagree with status.
+
+        when:         the moment this transition is considered to have happened.
+                      Used to back-date the history row + notification so the
+                      timeline reflects the simulated schedule, not "all at once"
+                      when an old order is caught up. Defaults to now().
+        notify_email: gate for the email channel only (in-app is always written).
+                      Lets the simulation suppress a burst of stale emails.
+        """
         order = Order.objects.select_for_update().get(pk=order_id)
         old_status = order.status
+        when = when or timezone.now()
         order.status = new_status
 
         # Auto-assign a rider when shipped (unless one already set or provided)
@@ -181,26 +230,95 @@ class OrderService:
         # Set tracking note — use provided value, else auto-generate
         order.tracking_note = tracking_note or _AUTO_NOTES.get(new_status, '')
 
+        # Keep the ETA consistent: an order is never "delivered" with a delivery
+        # date still in the future. Clamp the ETA to the delivery moment.
+        if new_status == 'delivered':
+            deliver_date = when.date()
+            if order.estimated_delivery is None or order.estimated_delivery > deliver_date:
+                order.estimated_delivery = deliver_date
+
         order.save()
 
-        OrderStatusHistory.objects.create(
+        history = OrderStatusHistory.objects.create(
             order=order,
             old_status=old_status,
             new_status=new_status,
             note=note or _AUTO_NOTES.get(new_status, ''),
             changed_by=changed_by,
         )
+        # changed_at is auto_now_add (write-once, ignores the value at create), so
+        # back-date it with an explicit UPDATE when a simulated time is supplied.
+        if when is not None:
+            OrderStatusHistory.objects.filter(pk=history.pk).update(changed_at=when)
 
         EventBus.publish(Events.ORDER_STATUS_CHANGED, {
             'order_id': order.id,
             'order_number': order.order_number,
             'user_id': order.user_id,
             'user_email': order.user.email,
+            'user_name': order.user.get_full_name(),
             'old_status': old_status,
             'new_status': new_status,
+            'when': when.isoformat(),
+            'notify_email': notify_email,
         })
 
         return order
+
+    # ── Lifecycle simulation ─────────────────────────────────────────────────
+    # SERVICE LAYER (continued): the simulation is the single source of truth for
+    # where an order is in its lifecycle. It is driven LAZILY — there is no
+    # background worker. Whenever an order is read (detail page polling, list,
+    # notification bell), sync_lifecycle catches it up to the status its schedule
+    # says it should be in, emitting one history row + one notification per step.
+    #
+    # Because every advance goes through update_status (above), the notification,
+    # timestamp, tracking note and audit row for each stage are produced together
+    # and can never drift apart — which is exactly the consistency guarantee the
+    # whole feature is about.
+
+    def sync_lifecycle(self, order: Order) -> Order:
+        """
+        Advance a single order through any lifecycle stages that are now due.
+
+        Forward-only and idempotent: re-reading an order never duplicates a
+        transition or moves it backward. Terminal states (cancelled / refunded)
+        and non-simulated seed orders are frozen — left exactly as they are.
+        """
+        if not order.is_simulated or order.status in ('cancelled', 'refunded'):
+            return order
+
+        now = timezone.now()
+        current_index = _PIPELINE.index(order.status) if order.status in _PIPELINE else -1
+
+        for stage, delay in _LIFECYCLE_SCHEDULE:
+            stage_index = _PIPELINE.index(stage)
+            if stage_index <= current_index:
+                continue  # already at or past this stage
+            due_at = order.created_at + delay
+            if due_at > now:
+                break  # schedule is ordered — nothing later is due yet
+            order = self.update_status(
+                order.id, stage, changed_by=order.user,
+                when=due_at,
+                notify_email=(stage in _EMAIL_STAGES and (now - due_at) <= _EMAIL_FRESHNESS),
+            )
+            current_index = stage_index
+
+        return order
+
+    def sync_user_orders(self, user) -> None:
+        """
+        Catch up all of a user's in-flight orders. Used when the notification
+        bell is opened so newly-due transitions have generated their
+        notifications before the list is returned.
+        """
+        in_flight = Order.objects.filter(
+            user=user, is_simulated=True,
+            status__in=['pending', 'confirmed', 'processing', 'shipped'],
+        )
+        for order in in_flight:
+            self.sync_lifecycle(order)
 
     # ── Returns / Refunds / Exchanges ────────────────────────────────────────
     # SERVICE LAYER (continued): the post-purchase lifecycle lives here too, so

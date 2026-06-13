@@ -55,6 +55,7 @@ import AdminOrdersPage from './pages/admin/AdminOrdersPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
+import AdminReviewsPage from './pages/admin/AdminReviewsPage';
 import AdminProductFormPage from './pages/admin/AdminProductFormPage';
 
 // Splash runs once ever per browser — never again after first view
@@ -144,6 +145,7 @@ export default function App() {
             <Route path="products" element={<AdminProductsPage />} />
             <Route path="products/new" element={<AdminProductFormPage />} />
             <Route path="products/:id/edit" element={<AdminProductFormPage />} />
+            <Route path="reviews" element={<AdminReviewsPage />} />
             <Route path="coupons" element={<AdminCouponsPage />} />
           </Route>
         </Route>
